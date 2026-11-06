@@ -29,6 +29,38 @@ export function Editor({ defaultValue = '', onChange }: EditorProps) {
             window.require(['vs/editor/editor.main'], () => {
                 if (!containerRef.current || editorRef.current) return;
 
+                // Register in-game API autocomplete definitions for Monaco JavaScript language service
+                const gameApiDefs = `
+/**
+ * Moves the character to the right continuously.
+ */
+declare function moveRight(): void;
+
+/**
+ * Moves the character to the left continuously.
+ */
+declare function moveLeft(): void;
+
+/**
+ * Stops all horizontal movement.
+ */
+declare function stop(): void;
+
+/**
+ * Displays and tracks a variable in the top-right corner of the game view.
+ * Call once during initialization to automatically track value changes on each tick.
+ * 
+ * @param variable The variable or label to track (e.g. track(counter)).
+ * @param value Optional explicit value or custom label.
+ */
+declare function track(variable: any, value?: any): void;
+`;
+
+                window.monaco.languages.typescript.javascriptDefaults.addExtraLib(
+                    gameApiDefs,
+                    'ts:filename/game-api.d.ts'
+                );
+
                 editorRef.current = window.monaco.editor.create(containerRef.current, {
                     value: defaultValue,
                     language: 'javascript',

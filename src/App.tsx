@@ -5,9 +5,11 @@ import { EventBus } from './game/EventBus';
 
 const STARTER_CODE = `//Javascript
 let counter = 0;
+let direction = 'right';
 
 //Track your own variable in the game view
 track(counter);
+track(direction);
 
 //update() function runs every 100ms
 function update() {
@@ -15,10 +17,13 @@ function update() {
 
   if (counter < 20) {
     moveRight();
+    direction = 'right'
   } else if (counter < 50) {
     moveLeft();
+    direction = 'left'
   } else {
     stop();
+    direction = 'stopped'
   }
 }
 `;
