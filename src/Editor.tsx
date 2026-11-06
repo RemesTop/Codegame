@@ -12,19 +12,11 @@ interface EditorProps {
     onChange?: (value: string) => void;
 }
 
-const PLACEHOLDER = `// Game script
-function update() {
-    
-}
-
-function start() {
-
-}
-`;
-
-export function Editor({ defaultValue = PLACEHOLDER, onChange }: EditorProps) {
+export function Editor({ defaultValue = '', onChange }: EditorProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<any>(null);
+    const onChangeRef = useRef(onChange);
+    onChangeRef.current = onChange;
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -44,13 +36,13 @@ export function Editor({ defaultValue = PLACEHOLDER, onChange }: EditorProps) {
                     automaticLayout: true,
                     minimap: { enabled: false },
                     fontSize: 14,
+                    lineNumbers: 'on',
+                    scrollBeyondLastLine: false,
                 });
 
-                if (onChange) {
-                    editorRef.current.onDidChangeModelContent(() => {
-                        onChange(editorRef.current.getValue());
-                    });
-                }
+                editorRef.current.onDidChangeModelContent(() => {
+                    onChangeRef.current?.(editorRef.current.getValue());
+                });
             });
         };
 
@@ -74,4 +66,3 @@ export function Editor({ defaultValue = PLACEHOLDER, onChange }: EditorProps) {
 
     return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 }
-

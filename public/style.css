@@ -3,7 +3,7 @@ body {
     padding: 0;
     color: rgba(255, 255, 255, 0.87);
     background-color: #000000;
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 #app {
@@ -13,6 +13,7 @@ body {
     overflow: hidden;
 }
 
+/* Left side: Phaser canvas container */
 .game-view {
     flex: 1;
     display: flex;
@@ -20,7 +21,7 @@ body {
     align-items: center;
     justify-content: center;
     position: relative;
-    background: #000;
+    background: #000000;
     min-width: 0;
 }
 
@@ -32,49 +33,93 @@ body {
     height: 100%;
 }
 
-
 #game-container canvas {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
 }
 
-.controls {
-    position: absolute;
-    bottom: 16px;
-    left: 16px;
-}
-
+/* Right side: Editor, toolbar, and error banner */
 .editor-view {
     flex: 1;
-    height: 80%;
-    margin-top: 100px;
+    height: 100%;
     min-width: 0;
-    border-left: 1px solid #2d2d2d;
+    border-left: 1px solid #333333;
     background: #1e1e1e;
+    display: flex;
+    flex-direction: column;
 }
 
+.editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #252526;
+    border-bottom: 1px solid #333333;
+}
+
+.editor-content {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+}
+
+.status-text {
+    font-size: 13px;
+    color: #888888;
+    margin-left: 8px;
+    font-family: monospace;
+}
+
+.status-text.running {
+    color: #4ade80;
+    font-weight: bold;
+}
+
+/* Buttons */
 .button {
-    width: 140px;
-    padding: 10px;
-    background-color: #000000;
-    color: rgba(255, 255, 255, 0.87);
-    border: 1px solid rgba(255, 255, 255, 0.87);
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background-color 0.2s, opacity 0.2s;
+    border: none;
+    outline: none;
+}
 
-    &:hover {
-        border: 1px solid #0ec3c9;
-        color: #0ec3c9;
-    }
+.button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
 
-    &:active {
-        background-color: #0ec3c9;
-    }
+.btn-run {
+    background-color: #238636;
+    color: #ffffff;
+}
 
-    &:disabled {
-        cursor: not-allowed;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        color: rgba(255, 255, 255, 0.3);
-    }
+.btn-run:hover:not(:disabled) {
+    background-color: #2ea043;
+}
+
+.btn-stop {
+    background-color: #da3633;
+    color: #ffffff;
+}
+
+.btn-stop:hover:not(:disabled) {
+    background-color: #f85149;
+}
+
+/* Error message banner */
+.error-banner {
+    padding: 10px 16px;
+    background-color: #491818;
+    color: #fca5a5;
+    font-size: 13px;
+    font-family: monospace;
+    border-top: 1px solid #7f1d1d;
+    max-height: 120px;
+    overflow-y: auto;
 }
