@@ -3,11 +3,16 @@ import { IRefPhaserGame, PhaserGame } from './PhaserGame';
 import { Editor } from './Editor';
 import { EventBus } from './game/EventBus';
 
-const STARTER_CODE = `let counter = 0;
+const STARTER_CODE = `//Javascript
+let counter = 0;
 
-// The 'update()' function runs every 100 milliseconds
+//Track your own variable in the game view
+track(counter);
+
+//update() function runs every 100ms
 function update() {
   counter++;
+
   if (counter < 20) {
     moveRight();
   } else if (counter < 50) {

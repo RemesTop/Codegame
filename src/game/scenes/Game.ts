@@ -12,6 +12,12 @@ export class Game extends Phaser.Scene {
     private readonly startY: number = 384;
     private readonly moveSpeed: number = 220; // Movement speed in pixels per second
 
+    // --- Tracked Variables HUD ---
+    private trackVars: Map<string, string> = new Map();
+    private trackGetters: Map<string, () => any> = new Map();
+    private trackBg!: Phaser.GameObjects.Rectangle;
+    private trackText!: Phaser.GameObjects.Text;
+
     // --- Safe Code Execution & Tick State ---
     // The player's compiled update() function holding its closure scope
     private playerUpdateFn: (() => void) | null = null;
@@ -37,6 +43,24 @@ export class Game extends Phaser.Scene {
         // Create the test character: a 48x48 red square with a white border
         this.player = this.add.rectangle(this.startX, this.startY, 48, 48, 0xff0000);
         this.player.setStrokeStyle(2, 0xffffff);
+
+        // --- Tracked Variables HUD (Top Right Corner) ---
+        // Compact semi-transparent dark background card
+        this.trackBg = this.add.rectangle(0, 0, 100, 30, 0x1e1e1e, 0.85);
+        this.trackBg.setStrokeStyle(1, 0x444444);
+        this.trackBg.setDepth(200);
+        this.trackBg.setVisible(false);
+
+        // Compact monospace text display aligned to the top-right
+        this.trackText = this.add.text(1008 - 8, 16 + 8, '', {
+            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+            fontSize: '13px',
+            color: '#00ffcc',
+            align: 'right',
+            lineSpacing: 4,
+        });
+        this.trackText.setOrigin(1, 0);
+        this.trackText.setDepth(201);
 
         // --- Phaser <-> React Communication ---
         // Listen for events emitted by React (App.tsx) via the shared EventBus
@@ -95,7 +119,83 @@ export class Game extends Phaser.Scene {
         }
     }
 
-    // --- Infinite Loop Protection ---
+    // --- Tracked Variables HUD Management ---
+
+    /**
+     * Registers a variable to be tracked.
+     * If a getter function is passed (e.g. `() => counter`), it is re-evaluated on every tick.
+     */
+    private registerTrack(label: string, valueOrGetter?: any) {
+        const key = String(label);
+        if (typeof valueOrGetter === 'function') {
+            this.trackGetters.set(key, valueOrGetter);
+        } else {
+            this.trackGetters.set(key, () => valueOrGetter);
+        }
+        this.evaluateTrackedVariables();
+    }
+
+    /**
+     * Evaluates all registered getters to update HUD with the latest values.
+     */
+    private evaluateTrackedVariables() {
+        if (this.trackGetters.size === 0) return;
+
+        for (const [name, getter] of this.trackGetters.entries()) {
+            try {
+                const val = getter();
+                this.setTrackedValue(name, val);
+            } catch {
+                this.setTrackedValue(name, 'undefined');
+            }
+        }
+        this.updateTrackDisplay();
+    }
+
+    private setTrackedValue(label: string, value: any) {
+        let formatted: string;
+        if (value === undefined) {
+            formatted = 'undefined';
+        } else if (value === null) {
+            formatted = 'null';
+        } else if (typeof value === 'object') {
+            try {
+                formatted = JSON.stringify(value);
+            } catch {
+                formatted = '[Object]';
+            }
+        } else {
+            formatted = String(value);
+        }
+
+        this.trackVars.set(label, formatted);
+    }
+
+    private updateTrackDisplay() {
+        if (!this.trackText || !this.trackBg) return;
+
+        if (this.trackVars.size === 0) {
+            this.trackText.setText('');
+            this.trackBg.setVisible(false);
+            return;
+        }
+
+        const lines: string[] = [];
+        for (const [name, val] of this.trackVars.entries()) {
+            lines.push(`${name}: ${val}`);
+        }
+        this.trackText.setText(lines.join('\n'));
+        this.trackBg.setVisible(true);
+
+        // Dynamically resize and position background box with compact 8px padding
+        const padding = 8;
+        const boxWidth = this.trackText.width + padding * 2;
+        const boxHeight = this.trackText.height + padding * 2;
+        this.trackBg.setSize(boxWidth, boxHeight);
+        this.trackBg.setPosition(1008 - boxWidth / 2, 16 + boxHeight / 2);
+    }
+
+    // --- Infinite Loop Protection & Code Transformations ---
 
     /**
      * Injects an iteration counter before while/for loops.
@@ -109,6 +209,17 @@ export class Game extends Phaser.Scene {
         });
     }
 
+    /**
+     * Automatically transforms single-argument `track('myVar')` or `track(myVar)` calls
+     * into `track('myVar', () => myVar)`. This captures the variable in a closure so it
+     * dynamically reflects changes during update() ticks without needing repeated track() calls.
+     */
+    private injectTrackGetters(code: string): string {
+        return code.replace(/\btrack\s*\(\s*(['"]?)([a-zA-Z_$][a-zA-Z0-9_$]*)\1\s*\)/g, (_, _quote, varName) => {
+            return `track('${varName}', () => ${varName})`;
+        });
+    }
+
     // --- Code Sandboxing & Compilation ---
 
     /**
@@ -116,38 +227,33 @@ export class Game extends Phaser.Scene {
      * persist across ticks using a JavaScript closure.
      */
     private handleRunCode(rawCode: string) {
-        // Reset any existing execution and reset character position
+        // Reset any existing execution, character position, and tracked list
         this.stopCodeExecution();
         this.resetCharacter();
 
         try {
             // 1. Inject loop counter protection
-            const protectedCode = this.injectLoopProtection(rawCode);
+            let preparedCode = this.injectLoopProtection(rawCode);
 
-            // 2. Sandboxing & Closure Scope:
+            // 2. Transform track('counter') into track('counter', () => counter)
+            preparedCode = this.injectTrackGetters(preparedCode);
+
+            // 3. Sandboxing & Closure Scope:
             // We use `new Function(...)` to construct a function factory.
-            //
-            // HOW SANDBOXING WORKS:
-            // By declaring sensitive browser globals (window, document, fetch, eval, Function)
-            // as formal parameter names, and passing `undefined` as their arguments, any reference
-            // to these names inside the player's code resolves to `undefined` instead of the real global.
-            //
-            // HOW CLOSURE PERSISTENCE WORKS:
-            // The factory function evaluates the player's code once. Top-level variables (like `let counter = 0`)
-            // are initialized in this outer function's scope. The factory then returns the `update` function.
-            // That `update` function retains a reference to this outer scope (a closure), so subsequent calls
-            // will read and modify the SAME `counter` variable across multiple timer ticks.
+            // Exposes ONLY: moveRight, moveLeft, stop, track.
+            // Shadows: window, document, fetch, eval, Function.
             const createPlayerScope = new Function(
                 'moveRight',
                 'moveLeft',
                 'stop',
+                'track',
                 'window',
                 'document',
                 'fetch',
                 'eval',
                 'Function',
                 `
-                ${protectedCode}
+                ${preparedCode}
                 return typeof update === 'function' ? update : null;
                 `
             );
@@ -157,6 +263,7 @@ export class Game extends Phaser.Scene {
                 () => this.moveRight(),
                 () => this.moveLeft(),
                 () => this.stopMoving(),
+                (label: string, valueOrGetter?: any) => this.registerTrack(label, valueOrGetter),
                 undefined, // shadows window
                 undefined, // shadows document
                 undefined, // shadows fetch
@@ -170,7 +277,10 @@ export class Game extends Phaser.Scene {
 
             this.playerUpdateFn = updateFn;
 
-            // 3. Start the fixed tick loop (100ms / 10 times per second)
+            // Evaluate initial tracked values immediately before the first tick
+            this.evaluateTrackedVariables();
+
+            // 4. Start the fixed tick loop (100ms / 10 times per second)
             this.codeTimer = this.time.addEvent({
                 delay: this.tickIntervalMs,
                 callback: this.executePlayerTick,
@@ -187,13 +297,16 @@ export class Game extends Phaser.Scene {
 
     /**
      * Executes on every timer tick (every 100ms).
-     * Calls the compiled player update() function wrapped in try/catch for safety.
+     * Calls the compiled player update() function wrapped in try/catch for safety,
+     * then refreshes the tracked variables HUD.
      */
     private executePlayerTick() {
         if (!this.playerUpdateFn) return;
 
         try {
             this.playerUpdateFn();
+            // Automatically re-evaluate tracked variables after update() runs
+            this.evaluateTrackedVariables();
         } catch (err: any) {
             // Catch runtime errors or infinite loop exceptions safely
             this.stopCodeExecution();
@@ -214,5 +327,8 @@ export class Game extends Phaser.Scene {
         }
         this.playerUpdateFn = null;
         this.movementState = 'STOP';
+        this.trackGetters.clear();
+        this.trackVars.clear();
+        this.updateTrackDisplay();
     }
 }
