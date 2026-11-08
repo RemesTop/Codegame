@@ -7,10 +7,15 @@ export interface RobotAPI {
     track: (label: string, valueOrGetter?: any) => void;
 }
 
+export interface CompiledScript {
+    start: (() => Promise<void> | void) | null;
+    update: (() => Promise<void> | void) | null;
+}
+
 /**
  * Injects infinite loop protection into while, for, and do...while loops.
  * 
- * - Declares a single `let __loopCount = 0;` at the top of the function and resets it in update(),
+ * - Declares a single `let __loopCount = 0;` at the top of the function and resets it in update() and start(),
  *   so unbraced conditionals (e.g. if (c) while (x) { ... }) are not broken by local declarations.
  * - Supports braceless loops (e.g. while(true); or while(true) moveRight();)
  *   by wrapping their bodies into braces { ... }.
@@ -245,8 +250,8 @@ export function injectLoopProtection(code: string): string {
 
     let result = `let __loopCount = 0;\n${output}`;
     result = result.replace(
-        /\b(async\s+)?function\s+update\s*\(([^)]*)\)\s*\{/g,
-        `$1function update($2) { __loopCount = 0; `
+        /\b(async\s+)?function\s+(update|start)\s*\(([^)]*)\)\s*\{/g,
+        `$1function $2($3) { __loopCount = 0; `
     );
 
     return result;
@@ -254,10 +259,10 @@ export function injectLoopProtection(code: string): string {
 
 /**
  * Automatically transforms player code so they can call sleep(ms) without writing async/await.
- * Replaces 'function update(' with 'async function update(' and 'sleep(' with 'await sleep('.
+ * Replaces 'function update(' and 'function start(' with async versions and 'sleep(' with 'await sleep('.
  */
 export function injectAsyncSleep(code: string): string {
-    let transformed = code.replace(/\bfunction\s+update\s*\(/g, 'async function update(');
+    let transformed = code.replace(/\bfunction\s+(update|start)\s*\(/g, 'async function $1(');
     transformed = transformed.replace(/(?<!await\s+)\bsleep\s*\(/g, 'await sleep(');
     return transformed;
 }
@@ -275,6 +280,7 @@ export function injectTrackGetters(code: string): string {
 
 /**
  * Compiles player code inside a sandboxed factory function with shadowed globals.
+ * Extracts both `start` (optional) and `update` functions.
  *
  * HOW THE SANDBOX WORKS:
  * 1. Global browser objects (window, document, fetch, eval, Function, globalThis, self)
@@ -288,8 +294,8 @@ export function compilePlayerCode(
     rawCode: string,
     api: RobotAPI,
     sleepFn: (ms: number) => Promise<void>
-): () => Promise<void> | void {
-    // 1. Auto-async sleep transformation
+): CompiledScript {
+    // 1. Auto-async sleep transformation for update() and start()
     let preparedCode = injectAsyncSleep(rawCode);
 
     // 2. Loop counter protection with single top-level __loopCount
@@ -316,13 +322,16 @@ export function compilePlayerCode(
         return (function() {
             "use strict";
             ${preparedCode}
-            return typeof update === 'function' ? update : null;
+            return {
+                start: typeof start === 'function' ? start : null,
+                update: typeof update === 'function' ? update : null
+            };
         })();
         `
     );
 
     // Execute the factory once to establish player closure scope
-    const updateFn = createPlayerScope(
+    const script: CompiledScript = createPlayerScope(
         api.moveRight,
         api.moveLeft,
         api.stop,
@@ -337,15 +346,16 @@ export function compilePlayerCode(
         undefined  // shadows self
     );
 
-    if (!updateFn) {
-        throw new Error("No update() function found. Please define 'function update() { ... }'.");
+    if (!script.update && !script.start) {
+        throw new Error("No update() or start() function found. Please define 'function update() { ... }' or 'function start() { ... }'.");
     }
 
-    return updateFn;
+    return script;
 }
 
 /**
- * Manages player code lifecycle: compilation, fixed tick loop (100ms), and error handling.
+ * Manages player code lifecycle: compilation, sequential start() execution,
+ * fixed tick loop (100ms), and error handling.
  */
 export class CodeRunner {
     private scene: Phaser.Scene;
@@ -389,31 +399,62 @@ export class CodeRunner {
         });
     }
 
-    run(rawCode: string): void {
+    /**
+     * Approach 1: Sequential Blocking Execution
+     * 1. Compiles script.
+     * 2. If start() exists, awaits it to completion (supporting sleep).
+     * 3. Once start() completes, starts the 100ms update() tick timer.
+     */
+    async run(rawCode: string): Promise<void> {
         this.stop();
 
         const runId = ++this.currentRunId;
 
+        // Immediately notify React UI that execution has started
+        EventBus.emit('code-started');
+
         try {
-            this.playerUpdateFn = compilePlayerCode(
+            const script = compilePlayerCode(
                 rawCode,
                 this.api,
                 (ms: number) => this.sleep(ms, runId)
             );
 
+            this.playerUpdateFn = script.update;
+
             // Execute initial evaluation for tracked variables
             this.onPostTick?.();
 
-            // Start fixed tick loop
-            this.codeTimer = this.scene.time.addEvent({
-                delay: this.tickIntervalMs,
-                callback: this.executeTick,
-                callbackScope: this,
-                loop: true,
-            });
+            // Run start() if defined, blocking until it finishes
+            if (script.start) {
+                this.isUpdating = true;
+                try {
+                    await script.start();
+                    this.onPostTick?.();
+                } finally {
+                    this.isUpdating = false;
+                }
+            }
 
-            EventBus.emit('code-started');
+            // Check if player clicked Stop/Reset while start() was running or sleeping
+            if (this.currentRunId !== runId) {
+                return;
+            }
+
+            // If an update() function was provided, start the recurring tick loop
+            if (this.playerUpdateFn) {
+                this.codeTimer = this.scene.time.addEvent({
+                    delay: this.tickIntervalMs,
+                    callback: this.executeTick,
+                    callbackScope: this,
+                    loop: true,
+                });
+            }
         } catch (err: any) {
+            // Silently ignore aborted execution caused by clicking stop while sleeping
+            if (err?.message === '__EXECUTION_ABORTED__') {
+                return;
+            }
             this.stop();
             EventBus.emit('code-error', err?.message || String(err));
         }
@@ -456,6 +497,6 @@ export class CodeRunner {
     }
 
     isRunning(): boolean {
-        return this.playerUpdateFn !== null;
+        return this.playerUpdateFn !== null || this.isUpdating;
     }
 }

@@ -8,19 +8,40 @@ This guide explains how the code editor works, what commands you can use, and ho
 
 The code editor on the right side of the screen is powered by Monaco Editor (the same open source editor used in Visual Studio Code). It runs entirely inside your browser, so you do not need to install anything on your computer.
 
-You write standard JavaScript in the editor.
+You write standard JavaScript in the editor. Because it is standard JavaScript, semicolons at the end of lines are optional (the browser automatically inserts them behind the scenes when a line ends), although using them is still good practice.
 
 ---
 
-## 2. How your code runs: The Tick Loop
+## 2. How your code runs: Lifecycle and the Tick Loop
 
 When you press the Run button, the game reads and compiles your script once.
 
-The game then calls your `update()` function repeatedly on a timer:
+### The `start()` function (optional)
+If you write a `start()` function, the game calls it exactly once right after you press Run, before the regular game loop begins.
+
+This is useful for one-time initialization, such as setting up values, logging a starting message, or running an opening movement sequence. You can also use `sleep()` inside `start()`. When you do, the game waits for `start()` to finish before starting the repeating `update()` loop.
+
+If your code does not need a one-time setup step, you can simply omit `start()` and only write `update()`.
+
+```javascript
+let mode = "BOOTING";
+track(mode);
+
+function start() {
+  mode = "CALIBRATING";
+  moveRight();
+  sleep(500); // moves right for half a second
+  stop();
+  mode = "READY";
+}
+```
+
+### The `update()` function
+After `start()` finishes (or immediately if you did not write a `start()` function), the game calls your `update()` function repeatedly on a fixed timer:
 * **Tick Rate:** Exactly once every 100 milliseconds (10 times every second).
 * **Game Render Rate:** The game screen itself draws at 60 frames per second. This means character movement stays smooth even though your code logic thinks in 100ms steps.
 
-Any variables you declare outside the `update()` function stay alive between ticks. For example:
+Any variables you declare outside your functions stay alive between ticks. For example:
 
 ```javascript
 let counter = 0;

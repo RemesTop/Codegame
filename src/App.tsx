@@ -11,21 +11,28 @@ let direction = 'right';
 track(counter);
 track(direction);
 
-//update() function runs every 100ms
-function update() {
-  counter++;
-
-  if (counter < 20) {
+//Runs when you press run
+function start() {
     moveRight();
-    sleep(100);
-    direction = 'right';
-  } else if (counter < 50) {
-    moveLeft();
-    direction = 'left';
-  } else {
+    
+    //Pause the function for 1000ms
+    sleep(1000);
     stop();
     direction = 'stopped';
-  }
+    sleep(1000);
+}
+
+//After start() runs, update() function runs every 100ms
+function update() {
+    counter++;
+
+    if (counter < 20) {
+         moveLeft();
+        direction = 'left';
+    } else {
+        stop();
+        direction = 'stopped';
+    }
 }
 `;
 
