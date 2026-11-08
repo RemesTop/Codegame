@@ -63,33 +63,35 @@ declare function track(variable: any, value?: any): void;
  * @param ms Duration to sleep in milliseconds.
  */
 declare function sleep(ms: number): Promise<void>;
-
-/**
- * Optional initialization function that runs exactly once when you press Run,
- * before the repeating update() tick loop begins.
- */
-declare function start(): Promise<void> | void;
-
-/**
- * Main game loop function that runs repeatedly every 100 milliseconds.
- */
-declare function update(): Promise<void> | void;
 `;
 
-                window.monaco.languages.typescript.javascriptDefaults.addExtraLib(
+                // Clean up any previously registered providers or extra libs
+                providersRef.current.forEach(p => p.dispose());
+                providersRef.current = [];
+
+                const extraLibDisposable = window.monaco.languages.typescript.javascriptDefaults.addExtraLib(
                     gameApiDefs,
                     'ts:filename/game-api.d.ts'
                 );
 
                 // Register custom hover provider so hovering over 'function start()' or 'function update()'
                 // displays clear documentation even though the user is declaring their own function
-                providersRef.current.forEach(p => p.dispose());
-                providersRef.current = [];
-
                 const hoverProvider = window.monaco.languages.registerHoverProvider('javascript', {
                     provideHover: (model: any, position: any) => {
                         const word = model.getWordAtPosition(position);
                         if (!word) return null;
+
+                        const lineContent = model.getLineContent(position.lineNumber);
+
+                        // Do not show lifecycle hover docs inside line comments
+                        const commentIdx = lineContent.indexOf('//');
+                        if (commentIdx !== -1 && position.column > commentIdx + 1) {
+                            return null;
+                        }
+
+                        // Check that the word is being used as a function (declaration or call)
+                        const isFunctionRef = new RegExp(`(?:\\bfunction\\s+)?\\b${word.word}\\s*\\(`).test(lineContent);
+                        if (!isFunctionRef) return null;
 
                         if (word.word === 'start') {
                             return {
@@ -158,7 +160,7 @@ declare function update(): Promise<void> | void;
                     }
                 });
 
-                providersRef.current.push(hoverProvider, completionProvider);
+                providersRef.current.push(extraLibDisposable, hoverProvider, completionProvider);
 
                 editorRef.current = window.monaco.editor.create(containerRef.current, {
                     value: defaultValue,
@@ -177,17 +179,26 @@ declare function update(): Promise<void> | void;
             });
         };
 
+        let loaderScript: HTMLScriptElement | null = null;
+
         if (window.require) {
             init();
         } else {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js';
-            script.async = true;
-            script.onload = init;
-            document.head.appendChild(script);
+            loaderScript = document.querySelector('script[data-monaco-loader]') as HTMLScriptElement | null;
+            if (!loaderScript) {
+                loaderScript = document.createElement('script');
+                loaderScript.src = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js';
+                loaderScript.async = true;
+                loaderScript.setAttribute('data-monaco-loader', 'true');
+                document.head.appendChild(loaderScript);
+            }
+            loaderScript.addEventListener('load', init);
         }
 
         return () => {
+            if (loaderScript) {
+                loaderScript.removeEventListener('load', init);
+            }
             providersRef.current.forEach(p => p.dispose());
             providersRef.current = [];
             if (editorRef.current) {

@@ -24,231 +24,244 @@ export interface CompiledScript {
  */
 export function injectLoopProtection(code: string): string {
     let loopCount = 0;
-    let output = '';
-    let i = 0;
-    const n = code.length;
-    let doWhileDepth = 0;
-
-    function isIdent(ch: string): boolean {
-        return /[a-zA-Z0-9_$]/.test(ch);
-    }
-
-    function skipSpaceAndComments(pos: number): number {
-        while (pos < n) {
-            const ch = code[pos];
-            if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') {
-                pos++;
-            } else if (ch === '/' && code[pos + 1] === '/') {
-                pos += 2;
-                while (pos < n && code[pos] !== '\n') pos++;
-            } else if (ch === '/' && code[pos + 1] === '*') {
-                pos += 2;
-                while (pos < n && !(code[pos] === '*' && code[pos + 1] === '/')) pos++;
-                pos += 2;
-            } else {
-                break;
-            }
-        }
-        return pos;
-    }
-
-    function findMatchingParen(openPos: number): number {
-        let depth = 1;
-        let p = openPos + 1;
-        while (p < n && depth > 0) {
-            const ch = code[p];
-            if (ch === '"' || ch === "'" || ch === '`') {
-                const quote = ch;
-                p++;
-                while (p < n && code[p] !== quote) {
-                    if (code[p] === '\\') p++;
-                    p++;
-                }
-                p++;
-            } else if (ch === '/' && code[p + 1] === '/') {
-                p += 2;
-                while (p < n && code[p] !== '\n') p++;
-            } else if (ch === '/' && code[p + 1] === '*') {
-                p += 2;
-                while (p < n && !(code[pos] === '*' && code[p + 1] === '/')) p++;
-                p += 2;
-            } else if (ch === '(') {
-                depth++;
-                p++;
-            } else if (ch === ')') {
-                depth--;
-                p++;
-            } else {
-                p++;
-            }
-        }
-        return p - 1;
-    }
-
-    function findStatementEnd(pos: number): number {
-        let parenDepth = 0;
-        let braceDepth = 0;
-        let p = pos;
-        while (p < n) {
-            const ch = code[p];
-            if (ch === '"' || ch === "'" || ch === '`') {
-                const quote = ch;
-                p++;
-                while (p < n && code[p] !== quote) {
-                    if (code[p] === '\\') p++;
-                    p++;
-                }
-                p++;
-            } else if (ch === '(') {
-                parenDepth++;
-                p++;
-            } else if (ch === ')') {
-                parenDepth = Math.max(0, parenDepth - 1);
-                p++;
-            } else if (ch === '{') {
-                braceDepth++;
-                p++;
-            } else if (ch === '}') {
-                braceDepth = Math.max(0, braceDepth - 1);
-                p++;
-                if (braceDepth === 0 && parenDepth === 0) {
-                    return p;
-                }
-            } else if (ch === ';' && parenDepth === 0 && braceDepth === 0) {
-                return p + 1;
-            } else {
-                p++;
-            }
-        }
-        return p;
-    }
-
-    function matchesKeyword(pos: number, word: string): boolean {
-        if (!code.startsWith(word, pos)) return false;
-        const prev = pos > 0 ? code[pos - 1] : ' ';
-        const next = pos + word.length < n ? code[pos + word.length] : ' ';
-        return !isIdent(prev) && !isIdent(next);
-    }
-
     const guard = 'if (++__loopCount > 10000) throw new Error("Infinite loop detected: exceeded 10,000 iterations in a single tick"); ';
 
-    while (i < n) {
-        const ch = code[i];
+    function transformLoops(source: string): string {
+        let output = '';
+        let i = 0;
+        const n = source.length;
+        let doWhileDepth = 0;
 
-        // 1. Strings
-        if (ch === '"' || ch === "'" || ch === '`') {
-            const quote = ch;
-            output += quote;
-            i++;
-            while (i < n && code[i] !== quote) {
-                if (code[i] === '\\') {
-                    output += code[i++];
+        function isIdent(ch: string): boolean {
+            return /[a-zA-Z0-9_$]/.test(ch);
+        }
+
+        function skipSpaceAndComments(pos: number): number {
+            while (pos < n) {
+                const ch = source[pos];
+                if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') {
+                    pos++;
+                } else if (ch === '/' && source[pos + 1] === '/') {
+                    pos += 2;
+                    while (pos < n && source[pos] !== '\n') pos++;
+                } else if (ch === '/' && source[pos + 1] === '*') {
+                    pos += 2;
+                    while (pos < n && !(source[pos] === '*' && source[pos + 1] === '/')) pos++;
+                    pos += 2;
+                } else {
+                    break;
                 }
-                if (i < n) output += code[i++];
             }
-            if (i < n) output += code[i++];
-            continue;
+            return pos;
         }
 
-        // 2. Line comment
-        if (ch === '/' && code[i + 1] === '/') {
-            while (i < n && code[i] !== '\n') {
-                output += code[i++];
+        function findMatchingParen(openPos: number): number {
+            let depth = 1;
+            let p = openPos + 1;
+            while (p < n && depth > 0) {
+                const ch = source[p];
+                if (ch === '"' || ch === "'" || ch === '`') {
+                    const quote = ch;
+                    p++;
+                    while (p < n && source[p] !== quote) {
+                        if (source[p] === '\\') p++;
+                        p++;
+                    }
+                    p++;
+                } else if (ch === '/' && source[p + 1] === '/') {
+                    p += 2;
+                    while (p < n && source[p] !== '\n') p++;
+                } else if (ch === '/' && source[p + 1] === '*') {
+                    p += 2;
+                    while (p < n && !(source[p] === '*' && source[p + 1] === '/')) p++;
+                    p += 2;
+                } else if (ch === '(') {
+                    depth++;
+                    p++;
+                } else if (ch === ')') {
+                    depth--;
+                    p++;
+                } else {
+                    p++;
+                }
             }
-            continue;
+            return p - 1;
         }
 
-        // 3. Block comment
-        if (ch === '/' && code[i + 1] === '*') {
-            output += '/*';
-            i += 2;
-            while (i < n && !(code[i] === '*' && code[i + 1] === '/')) {
-                output += code[i++];
+        function findStatementEnd(pos: number): number {
+            let parenDepth = 0;
+            let braceDepth = 0;
+            let p = pos;
+            while (p < n) {
+                const ch = source[p];
+                if (ch === '"' || ch === "'" || ch === '`') {
+                    const quote = ch;
+                    p++;
+                    while (p < n && source[p] !== quote) {
+                        if (source[p] === '\\') p++;
+                        p++;
+                    }
+                    p++;
+                } else if (ch === '/' && source[p + 1] === '/') {
+                    p += 2;
+                    while (p < n && source[p] !== '\n') p++;
+                } else if (ch === '/' && source[p + 1] === '*') {
+                    p += 2;
+                    while (p < n && !(source[p] === '*' && source[p + 1] === '/')) p++;
+                    p += 2;
+                } else if (ch === '(') {
+                    parenDepth++;
+                    p++;
+                } else if (ch === ')') {
+                    parenDepth = Math.max(0, parenDepth - 1);
+                    p++;
+                } else if (ch === '{') {
+                    braceDepth++;
+                    p++;
+                } else if (ch === '}') {
+                    braceDepth = Math.max(0, braceDepth - 1);
+                    p++;
+                    if (braceDepth === 0 && parenDepth === 0) {
+                        return p;
+                    }
+                } else if (ch === ';' && parenDepth === 0 && braceDepth === 0) {
+                    return p + 1;
+                } else {
+                    p++;
+                }
             }
-            if (i < n) {
-                output += '*/';
+            return p;
+        }
+
+        function matchesKeyword(pos: number, word: string): boolean {
+            if (!source.startsWith(word, pos)) return false;
+            const prev = pos > 0 ? source[pos - 1] : ' ';
+            const next = pos + word.length < n ? source[pos + word.length] : ' ';
+            return !isIdent(prev) && !isIdent(next);
+        }
+
+        while (i < n) {
+            const ch = source[i];
+
+            // 1. Strings
+            if (ch === '"' || ch === "'" || ch === '`') {
+                const quote = ch;
+                output += quote;
+                i++;
+                while (i < n && source[i] !== quote) {
+                    if (source[i] === '\\') {
+                        output += source[i++];
+                    }
+                    if (i < n) output += source[i++];
+                }
+                if (i < n) output += source[i++];
+                continue;
+            }
+
+            // 2. Line comment
+            if (ch === '/' && source[i + 1] === '/') {
+                while (i < n && source[i] !== '\n') {
+                    output += source[i++];
+                }
+                continue;
+            }
+
+            // 3. Block comment
+            if (ch === '/' && source[i + 1] === '*') {
+                output += '/*';
                 i += 2;
-            }
-            continue;
-        }
-
-        // 4. do ... while loops
-        if (matchesKeyword(i, 'do')) {
-            loopCount++;
-            doWhileDepth++;
-            output += 'do';
-            i += 2;
-
-            const afterDo = skipSpaceAndComments(i);
-            output += code.slice(i, afterDo);
-            i = afterDo;
-
-            if (code[i] === '{') {
-                output += `{ ${guard}`;
-                i++;
-            } else {
-                const stmtEnd = findStatementEnd(i);
-                const stmt = code.slice(i, stmtEnd);
-                output += `{ ${guard}${stmt} }`;
-                i = stmtEnd;
-            }
-            continue;
-        }
-
-        // 5. while or for loops
-        if (matchesKeyword(i, 'while') || matchesKeyword(i, 'for')) {
-            const isWhile = matchesKeyword(i, 'while');
-            const word = isWhile ? 'while' : 'for';
-
-            if (isWhile && doWhileDepth > 0) {
-                doWhileDepth--;
-                output += 'while';
-                i += 5;
+                while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
+                    output += source[i++];
+                }
+                if (i < n) {
+                    output += '*/';
+                    i += 2;
+                }
                 continue;
             }
 
-            loopCount++;
-            output += word;
-            i += word.length;
+            // 4. do ... while loops
+            if (matchesKeyword(i, 'do')) {
+                loopCount++;
+                doWhileDepth++;
+                output += 'do';
+                i += 2;
 
-            const openParen = code.indexOf('(', i);
-            if (openParen === -1) {
+                const afterDo = skipSpaceAndComments(i);
+                output += source.slice(i, afterDo);
+                i = afterDo;
+
+                if (source[i] === '{') {
+                    output += `{ ${guard}`;
+                    i++;
+                } else {
+                    const stmtEnd = findStatementEnd(i);
+                    const stmt = source.slice(i, stmtEnd);
+                    output += `{ ${guard}${transformLoops(stmt)} }`;
+                    i = stmtEnd;
+                }
                 continue;
             }
 
-            output += code.slice(i, openParen + 1);
-            const closeParen = findMatchingParen(openParen);
-            output += code.slice(openParen + 1, closeParen + 1);
-            i = closeParen + 1;
+            // 5. while or for loops
+            if (matchesKeyword(i, 'while') || matchesKeyword(i, 'for')) {
+                const isWhile = matchesKeyword(i, 'while');
+                const word = isWhile ? 'while' : 'for';
 
-            const afterParen = skipSpaceAndComments(i);
-            output += code.slice(i, afterParen);
-            i = afterParen;
+                if (isWhile && doWhileDepth > 0) {
+                    doWhileDepth--;
+                    output += 'while';
+                    i += 5;
+                    continue;
+                }
 
-            if (code[i] === '{') {
-                output += `{ ${guard}`;
-                i++;
-            } else if (code[i] === ';') {
-                output += `{ ${guard}}`;
-                i++;
-            } else {
-                const stmtEnd = findStatementEnd(i);
-                const stmt = code.slice(i, stmtEnd);
-                output += `{ ${guard}${stmt} }`;
-                i = stmtEnd;
+                loopCount++;
+                output += word;
+                i += word.length;
+
+                const openParen = source.indexOf('(', i);
+                if (openParen === -1) {
+                    continue;
+                }
+
+                output += source.slice(i, openParen + 1);
+                const closeParen = findMatchingParen(openParen);
+                output += source.slice(openParen + 1, closeParen + 1);
+                i = closeParen + 1;
+
+                const afterParen = skipSpaceAndComments(i);
+                output += source.slice(i, afterParen);
+                i = afterParen;
+
+                if (source[i] === '{') {
+                    output += `{ ${guard}`;
+                    i++;
+                } else if (source[i] === ';') {
+                    output += `{ ${guard}}`;
+                    i++;
+                } else {
+                    const stmtEnd = findStatementEnd(i);
+                    const stmt = source.slice(i, stmtEnd);
+                    output += `{ ${guard}${transformLoops(stmt)} }`;
+                    i = stmtEnd;
+                }
+                continue;
             }
-            continue;
+
+            output += ch;
+            i++;
         }
 
-        output += ch;
-        i++;
+        return output;
     }
+
+    const transformed = transformLoops(code);
 
     if (loopCount === 0) {
         return code;
     }
 
-    let result = `let __loopCount = 0;\n${output}`;
+    let result = `let __loopCount = 0;\n${transformed}`;
     result = result.replace(
         /\b(async\s+)?function\s+(update|start)\s*\(([^)]*)\)\s*\{/g,
         `$1function $2($3) { __loopCount = 0; `
@@ -259,11 +272,34 @@ export function injectLoopProtection(code: string): string {
 
 /**
  * Automatically transforms player code so they can call sleep(ms) without writing async/await.
- * Replaces 'function update(' and 'function start(' with async versions and 'sleep(' with 'await sleep('.
+ * Converts all function declarations to async functions and prefixes calls to sleep() and
+ * user-defined helper functions with await.
  */
 export function injectAsyncSleep(code: string): string {
-    let transformed = code.replace(/\bfunction\s+(update|start)\s*\(/g, 'async function $1(');
+    // 1. Find all declared function names (ignoring comments)
+    const cleanCode = code
+        .replace(/\/\/[^\n]*/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+    const userFnNames = new Set<string>();
+    const fnDeclRegex = /\bfunction\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g;
+    let match: RegExpExecArray | null;
+    while ((match = fnDeclRegex.exec(cleanCode)) !== null) {
+        userFnNames.add(match[1]);
+    }
+
+    // 2. Convert all standard function declarations to async function
+    let transformed = code.replace(/\b(?<!async\s+)function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g, 'async function $1(');
+
+    // 3. Prefix sleep(...) calls with await
     transformed = transformed.replace(/(?<!await\s+)\bsleep\s*\(/g, 'await sleep(');
+
+    // 4. Prefix calls to user-defined functions with await
+    for (const fnName of userFnNames) {
+        const escapedName = fnName.replace(/\$/g, '\\$');
+        const callRegex = new RegExp(`(?<!\\b(?:function|await)\\s+)(?<!\\.)\\b${escapedName}\\s*\\(`, 'g');
+        transformed = transformed.replace(callRegex, `await ${fnName}(`);
+    }
+
     return transformed;
 }
 

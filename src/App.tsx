@@ -7,22 +7,22 @@ const STARTER_CODE = `//Javascript
 let counter = 0;
 let direction = 'right';
 
-//Track your own variable in the game view
+//Track your own variable in the game HUD
 track(counter);
 track(direction);
 
-//Runs when you press run
+//Runs once when you press run
 function start() {
     moveRight();
     
-    //Pause the function for 1000ms
+    //Pause the function for 1000ms with sleep(1000)
     sleep(1000);
     stop();
     direction = 'stopped';
     sleep(1000);
 }
 
-//After start() runs, update() function runs every 100ms
+//After start() completes, update() function runs every 100ms
 function update() {
     counter++;
 
