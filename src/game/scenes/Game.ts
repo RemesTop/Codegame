@@ -12,7 +12,12 @@ export class Game extends Phaser.Scene {
     private movementState: MovementState = 'STOP';
     private readonly startX: number = 512;
     private readonly startY: number = 384;
-    private readonly moveSpeed: number = 220; // Movement speed in pixels per second
+
+    // Horizontal Kinematics (isolated on X-axis so future gravity on Y-axis remains independent)
+    private velocityX: number = 0;
+    private readonly maxSpeedX: number = 240; // Max horizontal speed (pixels/sec)
+    private readonly accelerationX: number = 650; // Horizontal acceleration (pixels/sec^2)
+    private readonly decelerationX: number = 750; // Horizontal braking/friction (pixels/sec^2)
 
     // --- Sub-components ---
     private hud!: GameHUD;
@@ -67,7 +72,8 @@ export class Game extends Phaser.Scene {
 
     /**
      * Phaser's internal render & physics loop running at ~60fps.
-     * Moves the red square smoothly according to its current movementState.
+     * Smoothly accelerates and decelerates the character horizontally.
+     * Note: Modifies only X-axis velocity and position, ensuring future Y-axis gravity remains independent.
      */
     update(_time: number, delta: number) {
         if (!this.player) return;
@@ -75,15 +81,37 @@ export class Game extends Phaser.Scene {
         // delta is in milliseconds; divide by 1000 to get frame-rate independent seconds
         const dt = delta / 1000;
 
+        // 1. Determine target horizontal velocity based on movement state
+        let targetVx = 0;
         if (this.movementState === 'RIGHT') {
-            this.player.x += this.moveSpeed * dt;
+            targetVx = this.maxSpeedX;
         } else if (this.movementState === 'LEFT') {
-            this.player.x -= this.moveSpeed * dt;
+            targetVx = -this.maxSpeedX;
         }
 
-        // Clamp the square within the game canvas (width 1024)
+        // 2. Smoothly approach target velocity using acceleration or braking deceleration
+        if (this.velocityX < targetVx) {
+            const rate = targetVx === 0 ? this.decelerationX : this.accelerationX;
+            this.velocityX = Math.min(this.velocityX + rate * dt, targetVx);
+        } else if (this.velocityX > targetVx) {
+            const rate = targetVx === 0 ? this.decelerationX : this.accelerationX;
+            this.velocityX = Math.max(this.velocityX - rate * dt, targetVx);
+        }
+
+        // 3. Update horizontal position (independent from Y-axis)
+        this.player.x += this.velocityX * dt;
+
+        // 4. Screen boundary clamping (width 1024)
         const halfWidth = this.player.width / 2;
-        this.player.x = Phaser.Math.Clamp(this.player.x, halfWidth, 1024 - halfWidth);
+        const clampedX = Phaser.Math.Clamp(this.player.x, halfWidth, 1024 - halfWidth);
+
+        // If character hit boundary, halt horizontal velocity
+        if (clampedX !== this.player.x) {
+            this.player.x = clampedX;
+            this.velocityX = 0;
+        }
+
+        // Future vertical kinematics (gravity, jumping) will modify player.y independently
     }
 
     // --- Exposed Movement API for Player Code ---
@@ -102,6 +130,7 @@ export class Game extends Phaser.Scene {
 
     private resetCharacter() {
         this.movementState = 'STOP';
+        this.velocityX = 0;
         if (this.player) {
             this.player.setPosition(this.startX, this.startY);
         }
