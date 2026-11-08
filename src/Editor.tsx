@@ -54,6 +54,14 @@ declare function stop(): void;
  * @param value Optional explicit value or custom label.
  */
 declare function track(variable: any, value?: any): void;
+
+/**
+ * Pauses execution for the specified number of milliseconds.
+ * Can be called directly without needing manual async/await.
+ * 
+ * @param ms Duration to sleep in milliseconds.
+ */
+declare function sleep(ms: number): Promise<void>;
 `;
 
                 window.monaco.languages.typescript.javascriptDefaults.addExtraLib(

@@ -45,6 +45,16 @@ Tells the character to start moving left continuously. Calling this automaticall
 ### `stop()`
 Stops all horizontal movement immediately. The character stays where it is.
 
+### `sleep(ms)`
+Pauses your code execution for the specified number of milliseconds. You do not need to write `await` or `async`. The game automatically handles the timing for you. While sleeping, the tick loop waits so you will not get overlapping updates.
+
+Example:
+```javascript
+moveRight();
+sleep(1000); // moves right for 1 second
+stop();
+```
+
 ### `track(variable)`
 Displays the value of a variable in a small box in the top right corner of the game view. 
 

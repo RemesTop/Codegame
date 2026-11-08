@@ -17,13 +17,14 @@ function update() {
 
   if (counter < 20) {
     moveRight();
-    direction = 'right'
+    sleep(100);
+    direction = 'right';
   } else if (counter < 50) {
     moveLeft();
-    direction = 'left'
+    direction = 'left';
   } else {
     stop();
-    direction = 'stopped'
+    direction = 'stopped';
   }
 }
 `;

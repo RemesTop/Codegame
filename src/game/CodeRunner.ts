@@ -9,7 +9,13 @@ export interface RobotAPI {
 
 /**
  * Injects infinite loop protection into while, for, and do...while loops.
- * 1. Adds 'if (x > 10000) break;' into loops so they don't crash the browser
+ * 
+ * - Declares a single `let __loopCount = 0;` at the top of the function and resets it in update(),
+ *   so unbraced conditionals (e.g. if (c) while (x) { ... }) are not broken by local declarations.
+ * - Supports braceless loops (e.g. while(true); or while(true) moveRight();)
+ *   by wrapping their bodies into braces { ... }.
+ * - Supports do...while loops (e.g. do { ... } while(...) or do stmt; while(...)).
+ * - Accurately pairs parentheses for any level of nested parentheses in conditions.
  */
 export function injectLoopProtection(code: string): string {
     let loopCount = 0;
@@ -59,7 +65,7 @@ export function injectLoopProtection(code: string): string {
                 while (p < n && code[p] !== '\n') p++;
             } else if (ch === '/' && code[p + 1] === '*') {
                 p += 2;
-                while (p < n && !(code[p] === '*' && code[p + 1] === '/')) p++;
+                while (p < n && !(code[pos] === '*' && code[p + 1] === '/')) p++;
                 p += 2;
             } else if (ch === '(') {
                 depth++;
@@ -119,6 +125,8 @@ export function injectLoopProtection(code: string): string {
         return !isIdent(prev) && !isIdent(next);
     }
 
+    const guard = 'if (++__loopCount > 10000) throw new Error("Infinite loop detected: exceeded 10,000 iterations in a single tick"); ';
+
     while (i < n) {
         const ch = code[i];
 
@@ -161,7 +169,7 @@ export function injectLoopProtection(code: string): string {
 
         // 4. do ... while loops
         if (matchesKeyword(i, 'do')) {
-            const id = loopCount++;
+            loopCount++;
             doWhileDepth++;
             output += 'do';
             i += 2;
@@ -171,12 +179,12 @@ export function injectLoopProtection(code: string): string {
             i = afterDo;
 
             if (code[i] === '{') {
-                output += `{ if (++__loopCount_${id} > 10000) throw new Error("Infinite loop detected: exceeded 10,000 iterations in a single tick"); `;
+                output += `{ ${guard}`;
                 i++;
             } else {
                 const stmtEnd = findStatementEnd(i);
                 const stmt = code.slice(i, stmtEnd);
-                output += `{ if (++__loopCount_${id} > 10000) throw new Error("Infinite loop detected: exceeded 10,000 iterations in a single tick"); ${stmt} }`;
+                output += `{ ${guard}${stmt} }`;
                 i = stmtEnd;
             }
             continue;
@@ -187,7 +195,6 @@ export function injectLoopProtection(code: string): string {
             const isWhile = matchesKeyword(i, 'while');
             const word = isWhile ? 'while' : 'for';
 
-            // Check if this while is the closing condition of an active do...while
             if (isWhile && doWhileDepth > 0) {
                 doWhileDepth--;
                 output += 'while';
@@ -195,7 +202,7 @@ export function injectLoopProtection(code: string): string {
                 continue;
             }
 
-            const id = loopCount++;
+            loopCount++;
             output += word;
             i += word.length;
 
@@ -214,15 +221,15 @@ export function injectLoopProtection(code: string): string {
             i = afterParen;
 
             if (code[i] === '{') {
-                output += `{ if (++__loopCount_${id} > 10000) throw new Error("Infinite loop detected: exceeded 10,000 iterations in a single tick"); `;
+                output += `{ ${guard}`;
                 i++;
             } else if (code[i] === ';') {
-                output += `{ if (++__loopCount_${id} > 10000) throw new Error("Infinite loop detected: exceeded 10,000 iterations in a single tick"); }`;
+                output += `{ ${guard}}`;
                 i++;
             } else {
                 const stmtEnd = findStatementEnd(i);
                 const stmt = code.slice(i, stmtEnd);
-                output += `{ if (++__loopCount_${id} > 10000) throw new Error("Infinite loop detected: exceeded 10,000 iterations in a single tick"); ${stmt} }`;
+                output += `{ ${guard}${stmt} }`;
                 i = stmtEnd;
             }
             continue;
@@ -236,17 +243,23 @@ export function injectLoopProtection(code: string): string {
         return code;
     }
 
-    const declarations = Array.from({ length: loopCount }, (_, k) => `let __loopCount_${k} = 0;`).join(' ');
-    const resets = Array.from({ length: loopCount }, (_, k) => `__loopCount_${k} = 0;`).join(' ');
-
-    let result = `${declarations}\n${output}`;
-
+    let result = `let __loopCount = 0;\n${output}`;
     result = result.replace(
-        /\bfunction\s+update\s*\(([^)]*)\)\s*\{/g,
-        `function update($1) { ${resets} `
+        /\b(async\s+)?function\s+update\s*\(([^)]*)\)\s*\{/g,
+        `$1function update($2) { __loopCount = 0; `
     );
 
     return result;
+}
+
+/**
+ * Automatically transforms player code so they can call sleep(ms) without writing async/await.
+ * Replaces 'function update(' with 'async function update(' and 'sleep(' with 'await sleep('.
+ */
+export function injectAsyncSleep(code: string): string {
+    let transformed = code.replace(/\bfunction\s+update\s*\(/g, 'async function update(');
+    transformed = transformed.replace(/(?<!await\s+)\bsleep\s*\(/g, 'await sleep(');
+    return transformed;
 }
 
 /**
@@ -271,19 +284,27 @@ export function injectTrackGetters(code: string): string {
  * 3. By keeping `"use strict";` inside the inner IIFE, having `eval` in the outer
  *    parameter list is 100% valid ECMAScript and does not cause a SyntaxError.
  */
-export function compilePlayerCode(rawCode: string, api: RobotAPI): () => void {
-    // 1. Inject loop counter protection
-    let preparedCode = injectLoopProtection(rawCode);
+export function compilePlayerCode(
+    rawCode: string,
+    api: RobotAPI,
+    sleepFn: (ms: number) => Promise<void>
+): () => Promise<void> | void {
+    // 1. Auto-async sleep transformation
+    let preparedCode = injectAsyncSleep(rawCode);
 
-    // 2. Transform track(var) into track('var', () => var)
+    // 2. Loop counter protection with single top-level __loopCount
+    preparedCode = injectLoopProtection(preparedCode);
+
+    // 3. Track getters transformation
     preparedCode = injectTrackGetters(preparedCode);
 
-    // 3. Construct sandboxed function factory
+    // 4. Construct sandboxed function factory
     const createPlayerScope = new Function(
         'moveRight',
         'moveLeft',
         'stop',
         'track',
+        'sleep',
         'window',
         'document',
         'fetch',
@@ -301,12 +322,12 @@ export function compilePlayerCode(rawCode: string, api: RobotAPI): () => void {
     );
 
     // Execute the factory once to establish player closure scope
-    // Shadowed objects cannot be used in the player code
     const updateFn = createPlayerScope(
         api.moveRight,
         api.moveLeft,
         api.stop,
         api.track,
+        sleepFn,
         undefined, // shadows window
         undefined, // shadows document
         undefined, // shadows fetch
@@ -330,7 +351,9 @@ export class CodeRunner {
     private scene: Phaser.Scene;
     private api: RobotAPI;
     private onPostTick?: () => void;
-    private playerUpdateFn: (() => void) | null = null;
+    private isUpdating: boolean = false;
+    private currentRunId: number = 0;
+    private playerUpdateFn: (() => Promise<void> | void) | null = null;
     private codeTimer: Phaser.Time.TimerEvent | null = null;
     private readonly tickIntervalMs: number = 100;
 
@@ -340,11 +363,43 @@ export class CodeRunner {
         this.onPostTick = onPostTick;
     }
 
+    /**
+     * Pauses player execution for `ms` milliseconds using Phaser's clock timer.
+     * If the execution was stopped or restarted while sleeping (runId mismatch),
+     * rejects with __EXECUTION_ABORTED__ to cancel remaining operations.
+     */
+    private sleep(ms: number, runId: number): Promise<void> {
+        // Immediately refresh tracked variables so values set right before sleep() are visible during the pause
+        this.onPostTick?.();
+
+        const safeMs = Math.max(0, Number(ms) || 0);
+
+        return new Promise<void>((resolve, reject) => {
+            this.scene.time.delayedCall(safeMs, () => {
+                // If runId changed while waiting (clicked Stop/Run), abort immediately
+                if (this.currentRunId !== runId) {
+                    reject(new Error('__EXECUTION_ABORTED__'));
+                    return;
+                }
+
+                // Keep HUD fresh when sleep finishes
+                this.onPostTick?.();
+                resolve();
+            });
+        });
+    }
+
     run(rawCode: string): void {
         this.stop();
 
+        const runId = ++this.currentRunId;
+
         try {
-            this.playerUpdateFn = compilePlayerCode(rawCode, this.api);
+            this.playerUpdateFn = compilePlayerCode(
+                rawCode,
+                this.api,
+                (ms: number) => this.sleep(ms, runId)
+            );
 
             // Execute initial evaluation for tracked variables
             this.onPostTick?.();
@@ -360,23 +415,39 @@ export class CodeRunner {
             EventBus.emit('code-started');
         } catch (err: any) {
             this.stop();
-            EventBus.emit('code-error', err.message || String(err));
+            EventBus.emit('code-error', err?.message || String(err));
         }
     }
 
-    private executeTick(): void {
-        if (!this.playerUpdateFn) return;
+    /**
+     * Executes on every timer tick (every 100ms).
+     * Prevents overlapping ticks: if a previous update() is still awaiting sleep(),
+     * the new tick is safely skipped until the previous update() resolves.
+     */
+    private async executeTick(): Promise<void> {
+        if (!this.playerUpdateFn || this.isUpdating) return;
 
+        this.isUpdating = true;
         try {
-            this.playerUpdateFn();
+            await this.playerUpdateFn();
             this.onPostTick?.();
         } catch (err: any) {
+            // Silently ignore aborted promises caused by stopping/restarting while sleeping
+            if (err?.message === '__EXECUTION_ABORTED__') {
+                return;
+            }
             this.stop();
-            EventBus.emit('code-error', `Runtime error in update(): ${err.message || String(err)}`);
+            EventBus.emit('code-error', `Runtime error in update(): ${err?.message || String(err)}`);
+        } finally {
+            this.isUpdating = false;
         }
     }
 
     stop(): void {
+        // Increment runId to invalidate any pending sleep() promises from this session
+        this.currentRunId++;
+        this.isUpdating = false;
+
         if (this.codeTimer) {
             this.codeTimer.remove();
             this.codeTimer = null;

@@ -4,7 +4,9 @@ This is a programming-puzzle game made with React and Phaser 4. The point of the
 ### How player Code Execution Works
 
 Player code is written in JavaScript inside a browser-based Monaco Editor (`src/Editor.tsx`) and executed client-side. When the player clicks **Run**, React sends the raw code string to the Phaser scene (`src/game/scenes/Game.ts`) via `EventBus`. 
+
 Before running, the game preprocesses the code to inject infinite-loop protection and variable tracking (`track()`), and then compiles it **once** using a sandboxed `new Function()` constructor that hides browser globals (`window`, `document`, `fetch`, etc.) and exposes only safe player character commands such as (`moveRight`, `moveLeft`, `stop`). 
+
 Compiling the code once allows top-level player variables to persist in memory across ticks via JavaScript closures. Phaser then invokes the player's `update()` function on a fixed 100ms tick timer to update the character's movement state, while Phaser's main 60 FPS game loop renders the character on screen.
 
 # Phaser template default README
