@@ -10,13 +10,20 @@ const config: Types.Core.GameConfig = {
     parent: 'game-container',
     backgroundColor: '#028af8',
     roundPixels: true,
-    scene: [
-        MainGame
-    ]
+    scene: [MainGame],
+    physics: {
+        default: 'arcade',
+        arcade: {
+            gravity: {
+                x: 0,
+                y: 100,
+            },
+        },
+    },
 };
 
 const StartGame = (parent: string) => {
     return new Game({ ...config, parent });
-}
+};
 
 export default StartGame;
