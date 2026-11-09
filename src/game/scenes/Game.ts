@@ -9,7 +9,6 @@ export type MovementState = 'LEFT' | 'RIGHT' | 'STOP';
 export class Game extends Phaser.Scene {
     // --- Test Character Properties ---
     private player!: Phaser.Physics.Arcade.Sprite;
-    private platform!: Phaser.GameObjects.Rectangle;
     private movementState: MovementState = 'STOP';
     private readonly startX: number = 512;
     private readonly startY: number = 384;
@@ -42,17 +41,36 @@ export class Game extends Phaser.Scene {
         this.player = this.physics.add.sprite(this.startX, this.startY, 'dude');
 
         // Create a platform for the character to stand on
-        this.platform = this.add.rectangle(
+        const platform = this.add.rectangle(
             this.startX,
             this.startY + this.player.height + 6,
-            120,
+            160,
             48,
             0xff0023,
         );
-        //Add platform to the physics world
-        this.platform = this.physics.add.existing(this.platform, true);
+        const platform2 = this.add.rectangle(
+            this.startX + 150,
+            this.startY + this.player.height + 6,
+            40,
+            70,
+            0xff0023,
+        );
+        const platform3 = this.add.rectangle(
+            this.startX + 100,
+            this.startY + this.player.height + 120,
+            130,
+            23,
+            0xff0023,
+        );
+        const platforms = [platform, platform2, platform3];
+        //Add platforms to the physics world
+        this.physics.world.enable([platform, platform2, platform3], 1);
         //Add collision
-        this.physics.add.collider(this.player, this.platform);
+        let i = 0;
+        while (i < 3) {
+            this.physics.add.collider(this.player, platforms[i]);
+            i += 1;
+        }
 
         // Initialize HUD for tracked variables in top-right corner
         this.hud = new GameHUD(this);
@@ -99,7 +117,7 @@ export class Game extends Phaser.Scene {
         // 1. Determine target horizontal velocity based on movement state
         let targetVx = 0;
         if (this.movementState === 'RIGHT') {
-            this.player.setVelocityX(50);
+            this.player.setVelocityX(150);
             //targetVx = this.maxSpeedX;
         } else if (this.movementState === 'LEFT') {
             this.player.setVelocityX(-100);
@@ -152,6 +170,7 @@ export class Game extends Phaser.Scene {
     }
 
     private resetCharacter() {
+        this.player.setVelocityX(0);
         this.movementState = 'STOP';
         this.velocityX = 0;
         if (this.player) {
