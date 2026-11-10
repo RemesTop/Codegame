@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { IRefPhaserGame, PhaserGame } from "./PhaserGame";
 import { Editor } from "./Editor";
 import { EventBus } from "./game/EventBus";
+import { useSavedCode } from "./storage";
 
 const STARTER_CODE = `//Javascript
 let counter = 0;
@@ -36,9 +37,12 @@ function update() {
 }
 `;
 
+// for testing purposes, each level has a unique ID, so each level can have its own saved code in localStorage
+const levelId_test = 0;
+
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
-    const [code, setCode] = useState<string>(STARTER_CODE);
+    const [code, setCode] = useSavedCode(levelId_test, STARTER_CODE);
     const [isRunning, setIsRunning] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
@@ -113,7 +117,7 @@ function App() {
 
                 <div className="editor-content">
                     <Editor
-                        defaultValue={STARTER_CODE}
+                        defaultValue={code}
                         value={code}
                         onChange={setCode}
                     />
