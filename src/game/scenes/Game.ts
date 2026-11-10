@@ -8,7 +8,7 @@ export type MovementState = 'LEFT' | 'RIGHT' | 'STOP';
 
 export class Game extends Phaser.Scene {
     // --- Test Character Properties ---
-    private player!: Phaser.GameObjects.Rectangle;
+    private player!: Phaser.Physics.Arcade.Sprite;
     private movementState: MovementState = 'STOP';
     private readonly startX: number = 512;
     private readonly startY: number = 384;
@@ -37,10 +37,40 @@ export class Game extends Phaser.Scene {
     create() {
         // Draw background
         this.add.image(512, 384, 'background');
+        // Create the test character: random dude sprite that is there by default
+        this.player = this.physics.add.sprite(this.startX, this.startY, 'dude');
 
-        // Create the test character: a 48x48 red square with a white border
-        this.player = this.add.rectangle(this.startX, this.startY, 48, 48, 0xff0000);
-        this.player.setStrokeStyle(2, 0xffffff);
+        // Create a platform for the character to stand on
+        const platform = this.add.rectangle(
+            this.startX,
+            this.startY + this.player.height + 6,
+            160,
+            48,
+            0xff0023,
+        );
+        const platform2 = this.add.rectangle(
+            this.startX + 150,
+            this.startY + this.player.height + 6,
+            40,
+            70,
+            0xff0023,
+        );
+        const platform3 = this.add.rectangle(
+            this.startX + 100,
+            this.startY + this.player.height + 120,
+            130,
+            23,
+            0xff0023,
+        );
+        const platforms = [platform, platform2, platform3];
+        //Add platforms to the physics world
+        this.physics.world.enable([platform, platform2, platform3], 1);
+        //Add collision
+        let i = 0;
+        while (i < 3) {
+            this.physics.add.collider(this.player, platforms[i]);
+            i += 1;
+        }
 
         // Initialize HUD for tracked variables in top-right corner
         this.hud = new GameHUD(this);
@@ -50,11 +80,14 @@ export class Game extends Phaser.Scene {
             moveRight: () => this.moveRight(),
             moveLeft: () => this.moveLeft(),
             stop: () => this.stopMoving(),
-            track: (label: string, valueOrGetter?: any) => this.hud.registerTrack(label, valueOrGetter),
+            track: (label: string, valueOrGetter?: any) =>
+                this.hud.registerTrack(label, valueOrGetter),
         };
 
         // Initialize CodeRunner with scene, API, and post-tick HUD refresh callback
-        this.codeRunner = new CodeRunner(this, api, () => this.hud.evaluateTrackedVariables());
+        this.codeRunner = new CodeRunner(this, api, () =>
+            this.hud.evaluateTrackedVariables(),
+        );
 
         // --- Phaser <-> React Communication ---
         EventBus.on('run-code', this.handleRunCode, this);
@@ -84,17 +117,20 @@ export class Game extends Phaser.Scene {
         // 1. Determine target horizontal velocity based on movement state
         let targetVx = 0;
         if (this.movementState === 'RIGHT') {
-            targetVx = this.maxSpeedX;
+            this.player.setVelocityX(150);
+            //targetVx = this.maxSpeedX;
         } else if (this.movementState === 'LEFT') {
-            targetVx = -this.maxSpeedX;
+            this.player.setVelocityX(-100);
         }
 
-        // 2. Smoothly approach target velocity using acceleration or braking deceleration
+        // 2. Smoothly approach target velocity using acceleration or braking deceleration ??
         if (this.velocityX < targetVx) {
-            const rate = targetVx === 0 ? this.decelerationX : this.accelerationX;
+            const rate =
+                targetVx === 0 ? this.decelerationX : this.accelerationX;
             this.velocityX = Math.min(this.velocityX + rate * dt, targetVx);
         } else if (this.velocityX > targetVx) {
-            const rate = targetVx === 0 ? this.decelerationX : this.accelerationX;
+            const rate =
+                targetVx === 0 ? this.decelerationX : this.accelerationX;
             this.velocityX = Math.max(this.velocityX - rate * dt, targetVx);
         }
 
@@ -103,7 +139,11 @@ export class Game extends Phaser.Scene {
 
         // 4. Screen boundary clamping (width 1024)
         const halfWidth = this.player.width / 2;
-        const clampedX = Phaser.Math.Clamp(this.player.x, halfWidth, 1024 - halfWidth);
+        const clampedX = Phaser.Math.Clamp(
+            this.player.x,
+            halfWidth,
+            1024 - halfWidth,
+        );
 
         // If character hit boundary, halt horizontal velocity
         if (clampedX !== this.player.x) {
@@ -125,10 +165,12 @@ export class Game extends Phaser.Scene {
     }
 
     private stopMoving() {
+        this.player.setVelocityX(0);
         this.movementState = 'STOP';
     }
 
     private resetCharacter() {
+        this.player.setVelocityX(0);
         this.movementState = 'STOP';
         this.velocityX = 0;
         if (this.player) {
