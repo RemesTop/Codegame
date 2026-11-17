@@ -18,6 +18,7 @@ export class GameHUD {
         this.trackBg = this.scene.add.rectangle(0, 0, 100, 30, 0x1e1e1e, 0.85);
         this.trackBg.setStrokeStyle(1, 0x444444);
         this.trackBg.setDepth(200);
+        this.trackBg.setScrollFactor(0);
         this.trackBg.setVisible(false);
 
         // Compact monospace text display aligned to the top-right
@@ -31,6 +32,7 @@ export class GameHUD {
         });
         this.trackText.setOrigin(1, 0);
         this.trackText.setDepth(201);
+        this.trackText.setScrollFactor(0);
     }
 
     /**
