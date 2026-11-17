@@ -18,6 +18,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     private readonly maxSpeedX: number = 240; // Max horizontal speed (pixels/sec)
     private readonly accelerationX: number = 650; // Horizontal acceleration (pixels/sec^2)
     private readonly decelerationX: number = 750; // Horizontal braking/friction (pixels/sec^2)
+    private readonly jumpVelocityY: number = 400; // Upward jump impulse (pixels/sec)
 
     constructor(scene: Phaser.Scene, x: number, y: number, texture: string = 'dude') {
         // If the requested texture is not in cache, create a clean default sprite texture
@@ -118,6 +119,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     public stopMoving(): void {
         this.movementState = 'STOP';
+    }
+
+    public jump(): void {
+        const body = this.body as Phaser.Physics.Arcade.Body | null;
+        if (body && body.onFloor()) {
+            this.setVelocityY(-this.jumpVelocityY);
+        }
     }
 
     /**

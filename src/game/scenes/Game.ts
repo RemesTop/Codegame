@@ -42,6 +42,7 @@ export class Game extends Phaser.Scene {
             moveRight: () => this.player.moveRight(),
             moveLeft: () => this.player.moveLeft(),
             stop: () => this.player.stopMoving(),
+            jump: () => this.player.jump(),
             track: (label: string, valueOrGetter?: any) =>
                 this.hud.registerTrack(label, valueOrGetter),
         };

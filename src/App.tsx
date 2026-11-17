@@ -17,9 +17,8 @@ function start() {
     moveRight();
     
     //Pause the function for 1000ms with sleep(1000)
-    sleep(1000);
-    stop();
-    direction = 'stopped';
+    sleep(1200);
+    jump();
     sleep(1000);
 }
 

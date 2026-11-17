@@ -4,6 +4,7 @@ export interface RobotAPI {
     moveRight: () => void;
     moveLeft: () => void;
     stop: () => void;
+    jump: () => void;
     track: (label: string, valueOrGetter?: any) => void;
 }
 
@@ -345,6 +346,7 @@ export function compilePlayerCode(
         'moveRight',
         'moveLeft',
         'stop',
+        'jump',
         'track',
         'sleep',
         'window',
@@ -371,6 +373,7 @@ export function compilePlayerCode(
         api.moveRight,
         api.moveLeft,
         api.stop,
+        api.jump,
         api.track,
         sleepFn,
         undefined, // shadows window

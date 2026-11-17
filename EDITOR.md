@@ -66,6 +66,16 @@ Tells the character to start moving left continuously. Calling this automaticall
 ### `stop()`
 Stops all horizontal movement immediately. The character stays where it is.
 
+### `jump()`
+Makes the character jump upward if it is standing on solid ground or a ramp. Calling `jump()` while already in midair does nothing.
+
+Example:
+```javascript
+moveRight();
+sleep(500);
+jump(); // jumps while moving right
+```
+
 ### `sleep(ms)`
 Pauses your code execution for the specified number of milliseconds. You do not need to write `await` or `async`. The game automatically handles the timing for you. While sleeping, the tick loop waits so you will not get overlapping updates.
 
@@ -109,7 +119,7 @@ function update() {
 ## 4. Editor Features
 
 ### Autocomplete & Hover Docs
-As you type, Monaco will suggest available commands (`moveRight`, `moveLeft`, `stop`, `track`). You can press Enter or Tab to accept a suggestion. Hovering your mouse over any command displays a short explanation of what it does.
+As you type, Monaco will suggest available commands (`moveRight`, `moveLeft`, `stop`, `jump`, `track`). You can press Enter or Tab to accept a suggestion. Hovering your mouse over any command displays a short explanation of what it does.
 
 ### Run & Stop Toggle Button
 * When the game is idle, click the green **▶ Run** button to start executing your code.
