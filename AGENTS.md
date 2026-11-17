@@ -54,6 +54,7 @@ Whenever you add a new command for the player (e.g. `jump()`, `canSeeEnemy()`, o
 ## 6. Code Style & Team Conventions
 - Write all project code in strict **TypeScript** (avoid `any` where possible).
 - Write clear, plain-English comments explaining non-obvious logic (especially regex transforms, closures, and Phaser-React event bridges) so all group members can easily follow the code.
+- Prefer simple easy to read code over optimizing where it's not necessary.
 - **Component Responsibilities:**
   - `src/game/CodeRunner.ts`: Sandboxing, code compilation, loop protection, `sleep` management, and the `start()` / `update()` tick loop.
   - `src/game/GameHUD.ts`: HUD display for tracked variables (configured with `resolution: 2`, `setScrollFactor(0)`, and pixel snapping to prevent blurriness).
