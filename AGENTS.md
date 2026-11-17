@@ -54,9 +54,18 @@ Whenever you add a new command for the player (e.g. `jump()`, `canSeeEnemy()`, o
 ## 6. Code Style & Team Conventions
 - Write all project code in strict **TypeScript** (avoid `any` where possible).
 - Write clear, plain-English comments explaining non-obvious logic (especially regex transforms, closures, and Phaser-React event bridges) so all group members can easily follow the code.
+- Prefer simple easy to read code over optimizing where it's not necessary.
 - **Component Responsibilities:**
   - `src/game/CodeRunner.ts`: Sandboxing, code compilation, loop protection, `sleep` management, and the `start()` / `update()` tick loop.
-  - `src/game/GameHUD.ts`: HUD display for tracked variables (configured with `resolution: 2` and pixel snapping to prevent blurriness).
+  - `src/game/GameHUD.ts`: HUD display for tracked variables (configured with `resolution: 2`, `setScrollFactor(0)`, and pixel snapping to prevent blurriness).
+  - `src/game/Levels/levels.ts`: Registry of 32x32 tileset definitions (`TILESETS`, mapping local tile indices to `'solid'`, `'ramp-left'`, `'ramp-right'`) and ordered level definitions (`LEVELS`).
+  - `src/game/LevelLoader.ts`: Preloads registered tilesets, loads Tiled JSON levels (exported with embedded tilesets), builds tilemap layers, configures solid collisions, and sets physics/camera bounds.
+  - `src/game/TilemapCollider.ts`: Two-pass Arcade Physics collider (`WORLD_STEP`) resolving 45-degree ramps before standard solid tile AABB collisions so ramp-to-solid transitions do not snag.
   - `src/game/Player.ts`: Player character entity, horizontal kinematics (acceleration/deceleration), Arcade Physics body, and movement controls.
-  - `src/game/scenes/Game.ts`: Phaser scene initialization, platform layout, physics collisions, and event bridges.
+  - `src/game/scenes/Game.ts`: Phaser scene initialization, level loading (`loadLevel`), camera follow, physics collisions, and event bridges.
   - `src/Editor.tsx`: Monaco editor integration, AMD CDN loading, autocomplete definitions, and hover providers.
+
+## 7. Level & Tileset Conventions
+- **Tiled Exports:** Export level maps as Tiled JSON into `src/game/Levels/` with **Embed Tileset** enabled (no external `.tsx` files).
+- **32x32 Tileset Shapes:** Register each tileset in `TILESETS` (`src/game/Levels/levels.ts`) with `tileShapes` mapping 0-based local tile indices to `'solid'`, `'ramp-left'` (rising left-to-right), or `'ramp-right'` (falling left-to-right).
+- **Non-Colliding Layers & Spawn Points:** Set a boolean custom layer property `collides: false` in Tiled for decorative tile layers. Optionally place an object named `spawn` (or `player` / type `spawn`) in a Tiled object layer to override the fallback spawn in `LEVELS`.

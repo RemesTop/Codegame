@@ -11,13 +11,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     public movementState: MovementState = 'STOP';
 
     // Spawn / Reset position
-    private readonly spawnX: number;
-    private readonly spawnY: number;
+    private spawnX: number;
+    private spawnY: number;
 
     // Horizontal Kinematics (isolated on X-axis so Y-axis gravity remains independent)
     private readonly maxSpeedX: number = 240; // Max horizontal speed (pixels/sec)
     private readonly accelerationX: number = 650; // Horizontal acceleration (pixels/sec^2)
     private readonly decelerationX: number = 750; // Horizontal braking/friction (pixels/sec^2)
+    private readonly jumpVelocityY: number = 400; // Upward jump impulse (pixels/sec)
 
     constructor(scene: Phaser.Scene, x: number, y: number, texture: string = 'dude') {
         // If the requested texture is not in cache, create a clean default sprite texture
@@ -80,18 +81,30 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
         this.setVelocityX(currentVx);
 
-        // Once the player falls completely below the screen, halt vertical velocity so coordinates stay reasonable
-        const screenBottom = this.scene.scale.height;
-        if (this.y > screenBottom + 200) {
+        // Once the player falls completely below the level bounds, halt vertical velocity so coordinates stay reasonable
+        const worldBottom = Math.max(
+            this.scene.scale.height,
+            this.scene.physics.world.bounds.bottom
+        );
+        if (this.y > worldBottom + 200) {
             this.setVelocityY(0);
         }
     }
 
     /**
-     * Returns true if the player has fallen below the bottom of the screen.
+     * Returns true if the player has fallen below the bottom of the level.
      */
     public isOffScreen(): boolean {
-        return this.y > this.scene.scale.height;
+        const worldBottom = Math.max(
+            this.scene.scale.height,
+            this.scene.physics.world.bounds.bottom
+        );
+        return this.y > worldBottom;
+    }
+
+    public setSpawnPosition(x: number, y: number): void {
+        this.spawnX = x;
+        this.spawnY = y;
     }
 
     // --- Exposed Movement API for Player Code ---
@@ -108,13 +121,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.movementState = 'STOP';
     }
 
+    public jump(): void {
+        const body = this.body as Phaser.Physics.Arcade.Body | null;
+        if (body && body.onFloor()) {
+            this.setVelocityY(-this.jumpVelocityY);
+        }
+    }
+
     /**
      * Resets character state, velocity, and position back to starting spawn coordinates.
      */
     public reset(): void {
         this.movementState = 'STOP';
-        this.setVelocity(0, 0);
-        this.setPosition(this.spawnX, this.spawnY);
+        const body = this.body as Phaser.Physics.Arcade.Body | null;
+        if (body) {
+            body.reset(this.spawnX, this.spawnY);
+        } else {
+            this.setVelocity(0, 0);
+            this.setPosition(this.spawnX, this.spawnY);
+        }
     }
 }
 
