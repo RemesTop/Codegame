@@ -57,5 +57,6 @@ Whenever you add a new command for the player (e.g. `jump()`, `canSeeEnemy()`, o
 - **Component Responsibilities:**
   - `src/game/CodeRunner.ts`: Sandboxing, code compilation, loop protection, `sleep` management, and the `start()` / `update()` tick loop.
   - `src/game/GameHUD.ts`: HUD display for tracked variables (configured with `resolution: 2` and pixel snapping to prevent blurriness).
-  - `src/game/scenes/Game.ts`: Phaser scene initialization, character kinematics, and event bridges.
+  - `src/game/Player.ts`: Player character entity, horizontal kinematics (acceleration/deceleration), Arcade Physics body, and movement controls.
+  - `src/game/scenes/Game.ts`: Phaser scene initialization, platform layout, physics collisions, and event bridges.
   - `src/Editor.tsx`: Monaco editor integration, AMD CDN loading, autocomplete definitions, and hover providers.

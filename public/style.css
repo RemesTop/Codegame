@@ -3,7 +3,9 @@ body {
     padding: 0;
     color: rgba(255, 255, 255, 0.87);
     background-color: #000000;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+        Cantarell, sans-serif;
 }
 
 #app {
@@ -84,7 +86,9 @@ body {
     font-weight: 600;
     font-size: 13px;
     cursor: pointer;
-    transition: background-color 0.2s, opacity 0.2s;
+    transition:
+        background-color 0.2s,
+        opacity 0.2s;
     border: none;
     outline: none;
 }
@@ -112,6 +116,12 @@ body {
     background-color: #f85149;
 }
 
+.btn-reset {
+    margin-left: auto;
+    background-color: #da3633;
+    color: #ffffff;
+}
+
 /* Error message banner */
 .error-banner {
     padding: 10px 16px;
@@ -123,3 +133,30 @@ body {
     max-height: 120px;
     overflow-y: auto;
 }
+
+/* Modal styles */
+.modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal {
+    background: #252526;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 6px;
+    min-width: 280px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
