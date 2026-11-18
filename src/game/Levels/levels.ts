@@ -219,22 +219,50 @@ export function getLevelIdFromUrl(): number {
     return LEVELS[0].id;
 }
 
+export type AppPage = 'game' | 'levels';
+
 /**
- * Updates the browser address bar with `?level=<levelId>` without reloading the page.
+ * Reads the active page from the `?page=` URL query parameter.
  */
-export function setLevelIdInUrl(levelId: number, replace: boolean = false): void {
+export function getPageFromUrl(): AppPage {
+    if (typeof window === 'undefined') {
+        return 'game';
+    }
+
+    const raw = new URLSearchParams(window.location.search).get('page');
+    return raw === 'levels' ? 'levels' : 'game';
+}
+
+/**
+ * Updates the browser address bar with `?level=<levelId>` (and optional `page=levels`)
+ * without reloading the page.
+ */
+export function setLevelIdInUrl(
+    levelId: number,
+    replace: boolean = false,
+    page: AppPage = 'game'
+): void {
     if (typeof window === 'undefined') {
         return;
     }
 
     const url = new URL(window.location.href);
-    const nextValue = String(levelId);
-    const alreadyMatches = url.searchParams.get('level') === nextValue;
-    url.searchParams.set('level', nextValue);
+    const nextLevel = String(levelId);
+    const nextPage = page === 'levels' ? 'levels' : null;
+    const alreadyMatches =
+        url.searchParams.get('level') === nextLevel &&
+        url.searchParams.get('page') === nextPage;
+
+    url.searchParams.set('level', nextLevel);
+    if (nextPage) {
+        url.searchParams.set('page', nextPage);
+    } else {
+        url.searchParams.delete('page');
+    }
 
     if (replace || alreadyMatches) {
-        window.history.replaceState({ levelId }, '', url.toString());
+        window.history.replaceState({ levelId, page }, '', url.toString());
     } else {
-        window.history.pushState({ levelId }, '', url.toString());
+        window.history.pushState({ levelId, page }, '', url.toString());
     }
 }
