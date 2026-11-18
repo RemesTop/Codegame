@@ -48,3 +48,64 @@ export function useSavedCode(levelId: number, starterCode: string) {
     return [activeCode, setCode] as const;
 }
 
+function bestTimeKey(levelId: number): string {
+    return `best-time-lvl-${levelId}`;
+}
+
+function readBestTime(levelId: number): number | null {
+    try {
+        const raw = localStorage.getItem(bestTimeKey(levelId));
+        if (raw === null) return null;
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+export function useBestTime(levelId: number) {
+    const [state, setState] = useState<{
+        levelId: number;
+        bestMs: number | null;
+    }>(() => ({
+        levelId,
+        bestMs: readBestTime(levelId),
+    }));
+
+    const activeBestMs =
+        state.levelId === levelId ? state.bestMs : readBestTime(levelId);
+
+    useEffect(() => {
+        if (state.levelId !== levelId) {
+            setState({
+                levelId,
+                bestMs: readBestTime(levelId),
+            });
+        }
+    }, [levelId, state.levelId]);
+
+    const recordBestTime = useCallback(
+        (completedLevelId: number, timeMs: number) => {
+            const safeMs = Math.max(0, Math.floor(timeMs));
+            const existing = readBestTime(completedLevelId);
+            if (existing !== null && safeMs >= existing) {
+                return;
+            }
+            try {
+                localStorage.setItem(
+                    bestTimeKey(completedLevelId),
+                    String(safeMs),
+                );
+            } catch {
+                // silent fail when can't save to localstorage
+            }
+            if (completedLevelId === levelId) {
+                setState({ levelId: completedLevelId, bestMs: safeMs });
+            }
+        },
+        [levelId],
+    );
+
+    return [activeBestMs, recordBestTime] as const;
+}
+
