@@ -61,6 +61,8 @@ export class Game extends Phaser.Scene {
         // --- Phaser <-> React Communication ---
         EventBus.on('run-code', this.handleRunCode, this);
         EventBus.on('stop-code', this.handleStopCode, this);
+        EventBus.on('pause-code', this.handlePauseCode, this);
+        EventBus.on('resume-code', this.handleResumeCode, this);
         EventBus.on('load-level', this.handleLoadLevel, this);
         EventBus.on('code-error', this.freezeSimulation, this);
 
@@ -68,6 +70,8 @@ export class Game extends Phaser.Scene {
         this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
             EventBus.off('run-code', this.handleRunCode, this);
             EventBus.off('stop-code', this.handleStopCode, this);
+            EventBus.off('pause-code', this.handlePauseCode, this);
+            EventBus.off('resume-code', this.handleResumeCode, this);
             EventBus.off('load-level', this.handleLoadLevel, this);
             EventBus.off('code-error', this.freezeSimulation, this);
             this.handleStopCode();
@@ -251,6 +255,7 @@ export class Game extends Phaser.Scene {
     }
 
     private handleStopCode() {
+        this.time.paused = false;
         this.codeRunner.stop();
         this.freezeSimulation();
         this.tilemapCollider?.reset();
@@ -258,6 +263,21 @@ export class Game extends Phaser.Scene {
         this.hud.reset();
         this.cameras.main.centerOn(this.player.x, this.player.y);
         EventBus.emit('code-stopped');
+    }
+
+    private handlePauseCode() {
+        if (!this.isSimulating) return;
+        this.isSimulating = false;
+        this.physics.pause();
+        this.time.paused = true;
+        this.cameras.main.stopFollow();
+    }
+
+    private handleResumeCode() {
+        this.time.paused = false;
+        this.isSimulating = true;
+        this.physics.resume();
+        this.followPlayerCamera();
     }
 
     private handleLoadLevel(levelId: number) {

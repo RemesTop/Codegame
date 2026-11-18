@@ -53,14 +53,16 @@ function App() {
     const [isLevelComplete, setIsLevelComplete] = useState<boolean>(false);
     const [isNewBestTime, setIsNewBestTime] = useState<boolean>(false);
     const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
+    const [isPaused, setIsPaused] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
 
     // --- Update run timer while code is executing ---
     useEffect(() => {
-        if (!isRunning) return;
+        if (!isRunning || isPaused) return;
 
-        const startTime = runStartTimeRef.current ?? Date.now();
+        const startTime =
+            runStartTimeRef.current ?? Date.now() - lastRunMsRef.current;
         runStartTimeRef.current = startTime;
 
         const intervalId = window.setInterval(() => {
@@ -70,7 +72,7 @@ function App() {
         return () => {
             window.clearInterval(intervalId);
         };
-    }, [isRunning]);
+    }, [isRunning, isPaused]);
 
     // --- Sync URL ?level=<id>&page=<page> on initial mount and browser Back/Forward ---
     useEffect(() => {
@@ -84,6 +86,7 @@ function App() {
             setCurrentLevelId(urlLevelId);
             setPage(urlPage);
             setIsMenuOpen(false);
+            setIsPaused(false);
             setIsLevelComplete(false);
             setIsNewBestTime(false);
             setErrorMessage(null);
@@ -113,17 +116,20 @@ function App() {
             setElapsedMs(0);
             setIsNewBestTime(false);
             setIsRunning(true);
+            setIsPaused(false);
             setErrorMessage(null);
         };
 
         const onCodeStopped = () => {
             freezeTimer();
             setIsRunning(false);
+            setIsPaused(false);
         };
 
         const onCodeError = (errorMsg: string) => {
             freezeTimer();
             setIsRunning(false);
+            setIsPaused(false);
             setErrorMessage(errorMsg);
         };
 
@@ -139,6 +145,7 @@ function App() {
             );
             setIsNewBestTime(isNewBest);
             setIsRunning(false);
+            setIsPaused(false);
             setIsLevelComplete(true);
         };
 
@@ -159,12 +166,14 @@ function App() {
     const handleRun = () => {
         setErrorMessage(null);
         setIsLevelComplete(false);
+        setIsPaused(false);
         EventBus.emit("run-code", code);
     };
 
     // Send stop request to the Phaser scene
     const handleStop = () => {
         setIsLevelComplete(false);
+        setIsPaused(false);
         EventBus.emit("stop-code");
     };
 
@@ -172,6 +181,7 @@ function App() {
     const handleRestartLevel = () => {
         runStartTimeRef.current = null;
         setElapsedMs(0);
+        setIsPaused(false);
         setIsLevelComplete(false);
         setErrorMessage(null);
         EventBus.emit("stop-code");
@@ -182,6 +192,7 @@ function App() {
         if (!nextLevel) return;
         runStartTimeRef.current = null;
         setElapsedMs(0);
+        setIsPaused(false);
         setIsLevelComplete(false);
         setErrorMessage(null);
         setCurrentLevelId(nextLevel.id);
@@ -194,6 +205,7 @@ function App() {
         runStartTimeRef.current = null;
         setElapsedMs(0);
         setIsMenuOpen(false);
+        setIsPaused(false);
         setIsLevelComplete(false);
         setErrorMessage(null);
         setPage("levels");
@@ -215,6 +227,28 @@ function App() {
     const handleBackFromLevelSelect = () => {
         setPage("game");
         setLevelIdInUrl(currentLevelId, false, "game");
+    };
+
+    const pauseGame = () => {
+        if (!isRunning || isPaused) return;
+        if (runStartTimeRef.current !== null) {
+            lastRunMsRef.current = Date.now() - runStartTimeRef.current;
+            setElapsedMs(lastRunMsRef.current);
+            runStartTimeRef.current = null;
+        }
+        EventBus.emit("pause-code");
+        setIsPaused(true);
+        setIsMenuOpen(true);
+    };
+
+    const resumeGame = () => {
+        if (!isPaused) {
+            setIsMenuOpen(false);
+            return;
+        }
+        EventBus.emit("resume-code");
+        setIsPaused(false);
+        setIsMenuOpen(false);
     };
 
     return (
@@ -274,7 +308,7 @@ function App() {
                         {isMenuOpen && (
                             <div
                                 className="modal-overlay"
-                                onClick={() => setIsMenuOpen(false)}
+                                onClick={resumeGame}
                             >
                                 <div
                                     className="modal menu-modal"
@@ -290,7 +324,7 @@ function App() {
                                     <div className="menu-actions">
                                         <button
                                             className="button btn-run"
-                                            onClick={() => setIsMenuOpen(false)}
+                                            onClick={resumeGame}
                                         >
                                             Resume
                                         </button>
@@ -317,9 +351,9 @@ function App() {
                         </span>
                         <button
                             className="button btn-secondary"
-                            onClick={() => setIsMenuOpen((open) => !open)}
+                            onClick={isMenuOpen ? resumeGame : pauseGame}
                         >
-                            Pause
+                            {isPaused ? "Resume" : "Pause"}
                         </button>
                     </div>
                 </div>
@@ -418,4 +452,3 @@ function App() {
 }
 
 export default App;
-
