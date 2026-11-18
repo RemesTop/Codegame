@@ -85,11 +85,11 @@ export function useBestTime(levelId: number) {
     }, [levelId, state.levelId]);
 
     const recordBestTime = useCallback(
-        (completedLevelId: number, timeMs: number) => {
+        (completedLevelId: number, timeMs: number): boolean => {
             const safeMs = Math.max(0, Math.floor(timeMs));
             const existing = readBestTime(completedLevelId);
             if (existing !== null && safeMs >= existing) {
-                return;
+                return false;
             }
             try {
                 localStorage.setItem(
@@ -102,6 +102,7 @@ export function useBestTime(levelId: number) {
             if (completedLevelId === levelId) {
                 setState({ levelId: completedLevelId, bestMs: safeMs });
             }
+            return true;
         },
         [levelId],
     );

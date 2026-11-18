@@ -241,11 +241,33 @@ body {
 .level-complete-modal h2 {
     margin: 0 0 8px 0;
     color: var(--accent-cyan);
-    font-size: 22px;
+    font-size: 26px;
+    letter-spacing: 0.04em;
 }
 
-.level-complete-modal p {
+.level-complete-level {
+    margin: 0 0 12px 0;
+    color: var(--accent-pink);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.level-complete-times {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+}
+
+.level-complete-times p {
     margin: 0;
+    color: var(--text-primary);
+    font-size: 16px;
+}
+
+.level-complete-times .level-complete-best {
     color: var(--accent-pink);
     font-size: 14px;
 }

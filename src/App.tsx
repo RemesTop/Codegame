@@ -51,6 +51,7 @@ function App() {
     const [isRunning, setIsRunning] = useState<boolean>(false);
     const [elapsedMs, setElapsedMs] = useState<number>(0);
     const [isLevelComplete, setIsLevelComplete] = useState<boolean>(false);
+    const [isNewBestTime, setIsNewBestTime] = useState<boolean>(false);
     const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
@@ -84,6 +85,7 @@ function App() {
             setPage(urlPage);
             setIsMenuOpen(false);
             setIsLevelComplete(false);
+            setIsNewBestTime(false);
             setErrorMessage(null);
             EventBus.emit("load-level", urlLevelId);
         };
@@ -109,6 +111,7 @@ function App() {
             runStartTimeRef.current = Date.now();
             lastRunMsRef.current = 0;
             setElapsedMs(0);
+            setIsNewBestTime(false);
             setIsRunning(true);
             setErrorMessage(null);
         };
@@ -130,7 +133,11 @@ function App() {
                 typeof completedLevelId === "number"
                     ? completedLevelId
                     : currentLevelIdRef.current;
-            recordBestTimeRef.current(targetLevelId, lastRunMsRef.current);
+            const isNewBest = recordBestTimeRef.current(
+                targetLevelId,
+                lastRunMsRef.current,
+            );
+            setIsNewBestTime(isNewBest);
             setIsRunning(false);
             setIsLevelComplete(true);
         };
@@ -232,14 +239,24 @@ function App() {
                         {isLevelComplete && (
                             <div className="modal-overlay">
                                 <div className="modal level-complete-modal">
-                                    <h2>Level Complete!</h2>
-                                    <p>{currentLevel.name} completed.</p>
+                                    <h2>YOU MADE IT!</h2>
+                                    <h3 className="level-complete-level">
+                                        {currentLevel.name.toUpperCase()}
+                                    </h3>
+                                    <div className="level-complete-times">
+                                        <p>Time: {formatElapsedTime(elapsedMs)}</p>
+                                        {isNewBestTime && (
+                                            <p className="level-complete-best">
+                                                New best time!
+                                            </p>
+                                        )}
+                                    </div>
                                     <div className="modal-actions level-complete-actions">
                                         <button
                                             className="button btn-secondary"
                                             onClick={handleRestartLevel}
                                         >
-                                            Restart
+                                            Play again
                                         </button>
                                         <button
                                             className="button btn-run"
@@ -263,7 +280,7 @@ function App() {
                                     className="modal menu-modal"
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <h2>Menu</h2>
+                                    <h2>Pause</h2>
                                     <p className="menu-best-time">
                                         Best time:{" "}
                                         {bestTimeMs !== null
@@ -302,7 +319,7 @@ function App() {
                             className="button btn-secondary"
                             onClick={() => setIsMenuOpen((open) => !open)}
                         >
-                            Menu
+                            Pause
                         </button>
                     </div>
                 </div>
