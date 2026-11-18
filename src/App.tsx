@@ -2,49 +2,52 @@ import { useEffect, useRef, useState } from "react";
 import { IRefPhaserGame, PhaserGame } from "./PhaserGame";
 import { Editor } from "./Editor";
 import { EventBus } from "./game/EventBus";
+import {
+    getLevelDefinition,
+    getLevelIdFromUrl,
+    LEVELS,
+    setLevelIdInUrl,
+} from "./game/Levels/levels";
 import { useSavedCode } from "./storage";
-
-const STARTER_CODE = `//Javascript
-let counter = 0;
-let direction = 'right';
-
-//Track your own variable in the game HUD
-track(counter);
-track(direction);
-
-//Runs once when you press run
-function start() {
-    moveRight();
-    
-    //Pause the function for 1000ms with sleep(1000)
-    sleep(1200);
-    jump();
-    sleep(1000);
-}
-
-//After start() completes, update() function runs every 100ms
-function update() {
-    counter++;
-
-    if (counter < 20) {
-         moveLeft();
-        direction = 'left';
-    } else {
-        stop();
-        direction = 'stopped';
-    }
-}
-`;
-
-// for testing purposes, each level has a unique ID, so each level can have its own saved code in localStorage
-const levelId_test = 0;
 
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
-    const [code, setCode] = useSavedCode(levelId_test, STARTER_CODE);
+    const [currentLevelId, setCurrentLevelId] = useState<number>(() =>
+        getLevelIdFromUrl(),
+    );
+    const currentLevel = getLevelDefinition(currentLevelId);
+    const currentLevelIndex = LEVELS.findIndex((l) => l.id === currentLevelId);
+    const nextLevel =
+        currentLevelIndex >= 0 && currentLevelIndex + 1 < LEVELS.length
+            ? LEVELS[currentLevelIndex + 1]
+            : null;
+
+    const [code, setCode] = useSavedCode(
+        currentLevelId,
+        currentLevel.starterCode,
+    );
     const [isRunning, setIsRunning] = useState<boolean>(false);
+    const [isLevelComplete, setIsLevelComplete] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
+
+    // --- Sync URL ?level=<id> on initial mount and browser Back/Forward ---
+    useEffect(() => {
+        setLevelIdInUrl(getLevelIdFromUrl(), true);
+
+        const onPopState = () => {
+            const urlLevelId = getLevelIdFromUrl();
+            setCurrentLevelId(urlLevelId);
+            setIsLevelComplete(false);
+            setErrorMessage(null);
+            EventBus.emit("load-level", urlLevelId);
+        };
+
+        window.addEventListener("popstate", onPopState);
+        return () => {
+            window.removeEventListener("popstate", onPopState);
+        };
+    }, []);
 
     // --- Listen to Phaser scene events via EventBus ---
     useEffect(() => {
@@ -62,26 +65,52 @@ function App() {
             setErrorMessage(errorMsg);
         };
 
+        const onLevelComplete = () => {
+            setIsRunning(false);
+            setIsLevelComplete(true);
+        };
+
         EventBus.on("code-started", onCodeStarted);
         EventBus.on("code-stopped", onCodeStopped);
         EventBus.on("code-error", onCodeError);
+        EventBus.on("level-complete", onLevelComplete);
 
         return () => {
             EventBus.removeListener("code-started", onCodeStarted);
             EventBus.removeListener("code-stopped", onCodeStopped);
             EventBus.removeListener("code-error", onCodeError);
+            EventBus.removeListener("level-complete", onLevelComplete);
         };
     }, []);
 
     // Send code execution request to the Phaser scene
     const handleRun = () => {
         setErrorMessage(null);
+        setIsLevelComplete(false);
         EventBus.emit("run-code", code);
     };
 
     // Send stop request to the Phaser scene
     const handleStop = () => {
+        setIsLevelComplete(false);
         EventBus.emit("stop-code");
+    };
+
+    // Reset current level simulation back to spawn
+    const handleRestartLevel = () => {
+        setIsLevelComplete(false);
+        setErrorMessage(null);
+        EventBus.emit("stop-code");
+    };
+
+    // Switch to the next level and load its own saved code
+    const handleNextLevel = () => {
+        if (!nextLevel) return;
+        setIsLevelComplete(false);
+        setErrorMessage(null);
+        setCurrentLevelId(nextLevel.id);
+        setLevelIdInUrl(nextLevel.id, false);
+        EventBus.emit("load-level", nextLevel.id);
     };
 
     return (
@@ -89,6 +118,31 @@ function App() {
             {/* Left side: Phaser Game Viewport */}
             <div className="game-view">
                 <PhaserGame ref={phaserRef} />
+                {isLevelComplete && (
+                    <div className="modal-overlay">
+                        <div className="modal level-complete-modal">
+                            <h2>Level Complete!</h2>
+                            <p>{currentLevel.name} completed.</p>
+                            <div className="modal-actions level-complete-actions">
+                                <button
+                                    className="button btn-secondary"
+                                    onClick={handleRestartLevel}
+                                >
+                                    Restart
+                                </button>
+                                <button
+                                    className="button btn-run"
+                                    onClick={handleNextLevel}
+                                    disabled={!nextLevel}
+                                >
+                                    {nextLevel
+                                        ? `Next Level (${nextLevel.name})`
+                                        : "All Levels Complete"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Right side: Code Editor & Controls */}
@@ -143,7 +197,7 @@ function App() {
                                     <button
                                         className="button btn-stop"
                                         onClick={() => {
-                                            setCode(STARTER_CODE);
+                                            setCode(currentLevel.starterCode);
                                             setShowConfirm(false);
                                         }}
                                     >

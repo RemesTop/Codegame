@@ -7,6 +7,13 @@ import {
     TILESETS,
 } from './Levels/levels';
 
+export interface GoalRegion {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
 export interface LoadedLevel {
     definition: LevelDefinition;
     map: Phaser.Tilemaps.Tilemap;
@@ -16,6 +23,7 @@ export interface LoadedLevel {
     rampLeftGids: Set<number>;
     rampRightGids: Set<number>;
     spawn: { x: number; y: number };
+    goal: GoalRegion | null;
     destroy: () => void;
 }
 
@@ -71,6 +79,36 @@ function findSpawnFromObjects(
         }
     }
     return { ...fallback };
+}
+
+function findGoalFromObjects(map: Phaser.Tilemaps.Tilemap): GoalRegion | null {
+    for (const objectLayer of map.objects) {
+        for (const obj of objectLayer.objects) {
+            const objName = (obj.name ?? '').toLowerCase();
+            const objType = (obj.type ?? '').toLowerCase();
+            if (objName === 'goal' || objType === 'goal') {
+                if (typeof obj.x === 'number' && typeof obj.y === 'number') {
+                    const width = typeof obj.width === 'number' && obj.width > 0 ? obj.width : 0;
+                    const height = typeof obj.height === 'number' && obj.height > 0 ? obj.height : 0;
+                    if (width > 0 && height > 0) {
+                        return {
+                            x: obj.x + width / 2,
+                            y: obj.y + height / 2,
+                            width,
+                            height,
+                        };
+                    }
+                    return {
+                        x: obj.x,
+                        y: obj.y,
+                        width: 32,
+                        height: 32,
+                    };
+                }
+            }
+        }
+    }
+    return null;
 }
 
 /**
@@ -183,6 +221,7 @@ export class LevelLoader {
         );
 
         const spawn = findSpawnFromObjects(map, definition.spawn);
+        const goal = findGoalFromObjects(map);
 
         return {
             definition,
@@ -193,6 +232,7 @@ export class LevelLoader {
             rampLeftGids,
             rampRightGids,
             spawn,
+            goal,
             destroy: () => {
                 for (const layer of layers) {
                     layer.destroy();

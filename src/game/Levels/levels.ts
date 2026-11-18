@@ -1,4 +1,5 @@
 import level1Data from './Level-1.json';
+import level2Data from './Level-2.json';
 
 /**
  * Collision shape of a single tile within a 32x32 tileset.
@@ -49,7 +50,66 @@ export interface LevelDefinition {
         x: number;
         y: number;
     };
+    starterCode: string;
 }
+
+const LEVEL_1_STARTER_CODE = `//Javascript
+let counter = 0;
+let direction = 'right';
+
+//Track your own variable in the game HUD
+track(counter);
+track(direction);
+
+//Runs once when you press run
+function start() {
+    moveRight();
+    
+    //Pause the function for 1000ms with sleep(1000)
+    sleep(1200);
+    jump();
+    sleep(1000);
+    jump();
+    sleep(2000);
+}
+
+//After start() completes, update() function runs every 100ms
+function update() {
+    counter++;
+
+    if (counter < 20) {
+        moveLeft();
+        direction = 'left';
+    } else if (counter < 45) {
+        jump();
+        moveLeft();
+        direction = 'left';
+    }else {
+        stop();
+        direction = 'stopped';
+    }
+}
+`;
+
+const LEVEL_2_STARTER_CODE = `// Level 2
+
+
+//track(something);
+
+function start() {
+    moveRight();
+    sleep(500);    
+    jump();
+    sleep(1000);
+    jump();
+    sleep(500);
+
+}
+
+function update(){
+
+}
+`;
 
 /**
  * Registry of all 32x32 tilesets available to levels.
@@ -86,6 +146,17 @@ export const LEVELS: LevelDefinition[] = [
             x: 544,
             y: 384,
         },
+        starterCode: LEVEL_1_STARTER_CODE,
+    },
+    {
+        id: 2,
+        name: 'Level 2',
+        mapData: level2Data as TiledMapJson,
+        spawn: {
+            x: 27,
+            y: 907,
+        },
+        starterCode: LEVEL_2_STARTER_CODE,
     },
 ];
 
@@ -98,4 +169,44 @@ export function getLevelDefinition(levelId: number): LevelDefinition {
         throw new Error(`Level ${levelId} is not defined in LEVELS.`);
     }
     return level;
+}
+
+/**
+ * Reads the active level ID from the `?level=` URL query parameter,
+ * falling back to the first level if missing or invalid.
+ */
+export function getLevelIdFromUrl(): number {
+    if (typeof window === 'undefined') {
+        return LEVELS[0].id;
+    }
+
+    const raw = new URLSearchParams(window.location.search).get('level');
+    if (raw !== null && raw.trim() !== '') {
+        const parsed = Number(raw);
+        if (Number.isInteger(parsed) && LEVELS.some((entry) => entry.id === parsed)) {
+            return parsed;
+        }
+    }
+
+    return LEVELS[0].id;
+}
+
+/**
+ * Updates the browser address bar with `?level=<levelId>` without reloading the page.
+ */
+export function setLevelIdInUrl(levelId: number, replace: boolean = false): void {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const url = new URL(window.location.href);
+    const nextValue = String(levelId);
+    const alreadyMatches = url.searchParams.get('level') === nextValue;
+    url.searchParams.set('level', nextValue);
+
+    if (replace || alreadyMatches) {
+        window.history.replaceState({ levelId }, '', url.toString());
+    } else {
+        window.history.pushState({ levelId }, '', url.toString());
+    }
 }

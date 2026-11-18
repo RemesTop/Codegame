@@ -160,3 +160,39 @@ body {
     margin-top: 16px;
 }
 
+.btn-secondary {
+    background-color: #3c3c3c;
+    color: #ffffff;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background-color: #4f4f4f;
+}
+
+.level-complete-modal {
+    padding: 24px 28px;
+    border: 1px solid #3f3f46;
+    text-align: center;
+    min-width: 320px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.level-complete-modal h2 {
+    margin: 0 0 8px 0;
+    color: #4ade80;
+    font-size: 22px;
+}
+
+.level-complete-modal p {
+    margin: 0;
+    color: #d4d4d8;
+    font-size: 14px;
+}
+
+.level-complete-actions {
+    justify-content: center;
+    margin-top: 20px;
+    gap: 12px;
+}
+
+
