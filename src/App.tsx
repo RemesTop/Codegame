@@ -164,6 +164,7 @@ function App() {
 
     // Send code execution request to the Phaser scene
     const handleRun = () => {
+        if (isPaused) return;
         setErrorMessage(null);
         setIsLevelComplete(false);
         setIsPaused(false);
@@ -216,6 +217,7 @@ function App() {
         runStartTimeRef.current = null;
         setElapsedMs(0);
         setIsMenuOpen(false);
+        setIsPaused(false);
         setIsLevelComplete(false);
         setErrorMessage(null);
         setCurrentLevelId(levelId);
@@ -226,11 +228,12 @@ function App() {
 
     const handleBackFromLevelSelect = () => {
         setPage("game");
+        setIsPaused(false);
         setLevelIdInUrl(currentLevelId, false, "game");
     };
 
     const pauseGame = () => {
-        if (!isRunning || isPaused) return;
+        if (isPaused) return;
         if (runStartTimeRef.current !== null) {
             lastRunMsRef.current = Date.now() - runStartTimeRef.current;
             setElapsedMs(lastRunMsRef.current);
@@ -364,6 +367,7 @@ function App() {
                         <button
                             className={`button ${isRunning ? "btn-stop" : "btn-run"}`}
                             onClick={isRunning ? handleStop : handleRun}
+                            disabled={!isRunning && isPaused}
                         >
                             {isRunning ? "⏹ Stop" : "▶ Run"}
                         </button>

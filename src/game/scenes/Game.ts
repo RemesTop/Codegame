@@ -14,6 +14,8 @@ export class Game extends Phaser.Scene {
     private tilemapCollider: TilemapCollider | null = null;
     private goalMarker: Phaser.GameObjects.Rectangle | null = null;
     private isSimulating: boolean = false;
+    private isPaused: boolean = false;
+    private resumeAsSimulating: boolean = false;
 
     // --- Sub-components ---
     private hud!: GameHUD;
@@ -246,6 +248,7 @@ export class Game extends Phaser.Scene {
     }
 
     private handleRunCode(rawCode: string) {
+        if (this.isPaused) return;
         this.codeRunner.stop();
         this.tilemapCollider?.reset();
         this.player.reset();
@@ -255,6 +258,8 @@ export class Game extends Phaser.Scene {
     }
 
     private handleStopCode() {
+        this.isPaused = false;
+        this.resumeAsSimulating = false;
         this.time.paused = false;
         this.codeRunner.stop();
         this.freezeSimulation();
@@ -266,7 +271,8 @@ export class Game extends Phaser.Scene {
     }
 
     private handlePauseCode() {
-        if (!this.isSimulating) return;
+        this.isPaused = true;
+        this.resumeAsSimulating = this.isSimulating;
         this.isSimulating = false;
         this.physics.pause();
         this.time.paused = true;
@@ -274,13 +280,21 @@ export class Game extends Phaser.Scene {
     }
 
     private handleResumeCode() {
+        this.isPaused = false;
         this.time.paused = false;
-        this.isSimulating = true;
-        this.physics.resume();
-        this.followPlayerCamera();
+        if (this.resumeAsSimulating) {
+            this.isSimulating = true;
+            this.physics.resume();
+            this.followPlayerCamera();
+        } else {
+            this.freezeSimulation();
+        }
     }
 
     private handleLoadLevel(levelId: number) {
+        this.isPaused = false;
+        this.resumeAsSimulating = false;
+        this.time.paused = false;
         this.codeRunner.stop();
         this.hud.reset();
         this.loadLevel(levelId);
