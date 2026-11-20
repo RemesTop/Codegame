@@ -75,7 +75,9 @@ export class TilemapCollider {
     private resolveRampCollisions(body: Phaser.Physics.Arcade.Body): void {
         if (
             this.level.rampLeftGids.size === 0 &&
-            this.level.rampRightGids.size === 0
+            this.level.rampRightGids.size === 0 &&
+            this.level.ceilingRampLeftGids.size === 0 &&
+            this.level.ceilingRampRightGids.size === 0
         ) {
             return;
         }
@@ -96,6 +98,7 @@ export class TilemapCollider {
         );
 
         let bestRampY: number | null = null;
+        let bestCeilingY: number | null = null;
 
         for (const layer of this.level.collidingLayers) {
             const tiles = layer.getTilesWithinWorldXY(
@@ -109,7 +112,11 @@ export class TilemapCollider {
             for (const tile of tiles) {
                 const isLeftRamp = this.level.rampLeftGids.has(tile.index);
                 const isRightRamp = this.level.rampRightGids.has(tile.index);
-                if (!isLeftRamp && !isRightRamp) continue;
+                const isCeilingLeft = this.level.ceilingRampLeftGids.has(tile.index);
+                const isCeilingRight = this.level.ceilingRampRightGids.has(tile.index);
+                if (!isLeftRamp && !isRightRamp && !isCeilingLeft && !isCeilingRight) {
+                    continue;
+                }
 
                 const tileLeft = tile.getLeft();
                 const tileRight = tile.getRight();
@@ -122,6 +129,73 @@ export class TilemapCollider {
 
                 // Must overlap horizontally with this ramp tile
                 if (body.right <= tileLeft || body.position.x >= tileRight) {
+                    continue;
+                }
+
+                if (isCeilingLeft || isCeilingRight) {
+                    // 1. Flat top surface when standing/landing on top of an upside-down ramp
+                    if (
+                        prevBottom <= tileTop + 4 &&
+                        body.bottom > tileTop &&
+                        body.velocity.y >= 0
+                    ) {
+                        bestRampY =
+                            bestRampY === null ? tileTop : Math.min(bestRampY, tileTop);
+                        continue;
+                    }
+
+                    // 2. Exposed vertical back-wall on the solid side of the ceiling corner
+                    if (
+                        isCeilingLeft &&
+                        prevLeft >= tileRight - 2 &&
+                        body.position.y < tileBottom - 12 &&
+                        body.bottom > tileTop
+                    ) {
+                        body.position.x = tileRight;
+                        body.updateCenter();
+                        if (body.velocity.x < 0) body.velocity.x = 0;
+                        body.blocked.left = true;
+                        body.blocked.none = false;
+                        continue;
+                    }
+
+                    if (
+                        isCeilingRight &&
+                        prevRight <= tileLeft + 2 &&
+                        body.position.y < tileBottom - 12 &&
+                        body.bottom > tileTop
+                    ) {
+                        body.position.x = tileLeft - body.width;
+                        body.updateCenter();
+                        if (body.velocity.x > 0) body.velocity.x = 0;
+                        body.blocked.right = true;
+                        body.blocked.none = false;
+                        continue;
+                    }
+
+                    // 3. 45-degree sloped underside ceiling collision
+                    let ceilY: number;
+                    if (isCeilingLeft) {
+                        // Solid top-right: underside falls from (tileLeft, tileTop) to (tileRight, tileBottom)
+                        const sampleX = Phaser.Math.Clamp(body.right, tileLeft, tileRight);
+                        const t = (sampleX - tileLeft) / tileWidth;
+                        ceilY = tileTop + t * tileHeight;
+                    } else {
+                        // Solid top-left: underside rises from (tileLeft, tileBottom) to (tileRight, tileTop)
+                        const sampleX = Phaser.Math.Clamp(body.position.x, tileLeft, tileRight);
+                        const t = (sampleX - tileLeft) / tileWidth;
+                        ceilY = tileBottom - t * tileHeight;
+                    }
+
+                    if (
+                        body.velocity.y <= 0 &&
+                        prevTop >= tileTop - 4 &&
+                        body.position.y < ceilY &&
+                        body.bottom > ceilY
+                    ) {
+                        bestCeilingY =
+                            bestCeilingY === null ? ceilY : Math.max(bestCeilingY, ceilY);
+                    }
                     continue;
                 }
 
@@ -207,6 +281,18 @@ export class TilemapCollider {
             body.blocked.down = true;
             body.blocked.none = false;
             body.touching.down = true;
+            body.touching.none = false;
+        }
+
+        if (bestCeilingY !== null) {
+            body.position.y = bestCeilingY;
+            body.updateCenter();
+            if (body.velocity.y < 0) {
+                body.velocity.y = 0;
+            }
+            body.blocked.up = true;
+            body.blocked.none = false;
+            body.touching.up = true;
             body.touching.none = false;
         }
     }
