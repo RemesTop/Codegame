@@ -56,6 +56,31 @@ declare function stop(): void;
 declare function jump(): void;
 
 /**
+ * Shoots a raycast from the character at the given angle and returns the distance in pixels
+ * to the first matching tile or object, or undefined if nothing matching is hit.
+ *
+ * Angle convention: 0 = right, 90 = up, 180 = left, 270 = down.
+ * Negative angles wrap clockwise (e.g. -10 becomes 350) and values >= 360 wrap around.
+ *
+ * @param angle Direction in degrees (default: 0, straight right).
+ * @param type Target type to detect: 'any', 'ground', or 'goal' (default: 'any').
+ * @returns Distance in pixels to the hit target, or undefined if not found or blocked by another type.
+ */
+declare function detect(angle?: number, type?: 'any' | 'ground' | 'goal' | string): number | undefined;
+
+/**
+ * Shoots a raycast from the character at the given angle and returns true if a matching
+ * tile or object is found within maxDistance pixels, or false otherwise.
+ * Draws the fading white ray only when true.
+ *
+ * @param angle Direction in degrees (0 = right, 90 = up, 180 = left, 270 = down).
+ * @param type Target type to detect: 'any', 'ground', or 'goal'.
+ * @param maxDistance Maximum distance in pixels to check.
+ * @returns true if a matching target is within maxDistance, otherwise false.
+ */
+declare function detect(angle: number, type: 'any' | 'ground' | 'goal' | string, maxDistance: number): boolean;
+
+/**
  * Displays and tracks a variable in the top-right corner of the game view.
  * Call once during initialization to automatically track value changes on each tick.
  * 

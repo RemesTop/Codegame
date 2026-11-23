@@ -76,6 +76,29 @@ sleep(500);
 jump(); // jumps while moving right
 ```
 
+### `detect(angle, type, maxDistance)`
+Shoots a sensor ray from the character in a chosen direction.
+* **Without `maxDistance`:** If it hits a matching tile or object, it draws a white line that fades out quickly and returns the distance in pixels. If nothing is hit or the first thing hit is a different type, no line is drawn and it returns `undefined`. Because it returns `undefined` on a miss, comparisons like `detect(0, 'ground') <= 50` safely evaluate to `false` when nothing is found.
+* **With `maxDistance`:** Returns `true` if a matching tile or object is within `maxDistance` pixels, or `false` otherwise. The fading white line is only drawn when it returns `true`.
+
+* **`angle`** (optional, default `0`): Direction in degrees. `0` points straight right, `90` points straight up, `180` points straight left, and `270` points straight down. Negative numbers wrap clockwise from `360` (for example, `-20` becomes `340`, pointing slightly downward to the right), and numbers above `360` wrap around (for example, `370` becomes `10`).
+* **`type`** (optional, default `'any'`): What you want to detect. Supported types are `'any'` (first tile or object), `'ground'` (solid tiles, ramps, and the left/right edges of the level), and `'goal'` (the level goal).
+* **`maxDistance`** (optional): Maximum distance in pixels. When provided, `detect()` returns `true` or `false` instead of a number.
+
+Example:
+```javascript
+let wallDist;
+track(wallDist);
+
+function update() {
+  wallDist = detect(0, 'ground'); // distance in pixels, or undefined
+  if (detect(-20, 'ground', 60)) { // true if ground is within 60px at -20 degrees
+    jump();
+  }
+  moveRight();
+}
+```
+
 ### `sleep(ms)`
 Pauses your code execution for the specified number of milliseconds. You do not need to write `await` or `async`. The game automatically handles the timing for you. While sleeping, the tick loop waits so you will not get overlapping updates.
 
@@ -119,7 +142,7 @@ function update() {
 ## 4. Editor Features
 
 ### Autocomplete & Hover Docs
-As you type, Monaco will suggest available commands (`moveRight`, `moveLeft`, `stop`, `jump`, `track`). You can press Enter or Tab to accept a suggestion. Hovering your mouse over any command displays a short explanation of what it does.
+As you type, Monaco will suggest available commands (`moveRight`, `moveLeft`, `stop`, `jump`, `detect`, `track`). You can press Enter or Tab to accept a suggestion. Hovering your mouse over any command displays a short explanation of what it does.
 
 ### Run & Stop Toggle Button
 * When the game is idle, click the green **▶ Run** button to start executing your code.
