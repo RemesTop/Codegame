@@ -6,7 +6,7 @@ import { Player } from '../Player';
 import { LevelLoader, LoadedLevel } from '../LevelLoader';
 import { getLevelIdFromUrl } from '../Levels/levels';
 import { TilemapCollider } from '../TilemapCollider';
-import { DetectObjectTarget, Raycaster } from '../Raycaster';
+import { DetectObjectTarget, pixelsToUnits, Raycaster } from '../Raycaster';
 
 export class Game extends Phaser.Scene {
     private player!: Player;
@@ -64,6 +64,9 @@ export class Game extends Phaser.Scene {
 
         // --- Preview Camera Panning / Scrolling (active while frozen before Run) ---
         this.setupPreviewCameraControls();
+
+        // --- Hover World Coordinate Readout ---
+        this.setupHoverCoordTracking();
 
         // --- Phaser <-> React Communication ---
         EventBus.on('run-code', this.handleRunCode, this);
@@ -195,6 +198,46 @@ export class Game extends Phaser.Scene {
 
         this.input.on('pointerup', () => {
             isDragging = false;
+        });
+    }
+
+    /**
+     * Tracks the pointer's world coordinates inside the game canvas and emits
+     * them to React so the footer can display `(x, y)` next to the level name.
+     */
+    private setupHoverCoordTracking(): void {
+        let lastX: number | null = null;
+        let lastY: number | null = null;
+
+        // Keep Phaser's cached canvas bounds in sync with CSS scaling on window resize
+        const onWindowResize = () => {
+            this.scale.updateBounds();
+        };
+        window.addEventListener('resize', onWindowResize);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            window.removeEventListener('resize', onWindowResize);
+        });
+
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+            const tileW = this.currentLevel?.map.tileWidth ?? 32;
+            const tileH = this.currentLevel?.map.tileHeight ?? 32;
+            const mapHeight = this.currentLevel?.map.heightInPixels ?? this.scale.height;
+            const x = Math.round(pixelsToUnits(worldPoint.x, tileW));
+            const y = Math.round(pixelsToUnits(mapHeight - worldPoint.y, tileH));
+            if (x !== lastX || y !== lastY) {
+                lastX = x;
+                lastY = y;
+                EventBus.emit('pointer-coords', { x, y });
+            }
+        });
+
+        this.input.on('gameout', () => {
+            if (lastX !== null || lastY !== null) {
+                lastX = null;
+                lastY = null;
+                EventBus.emit('pointer-coords', null);
+            }
         });
     }
 

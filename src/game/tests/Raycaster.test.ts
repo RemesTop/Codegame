@@ -160,14 +160,14 @@ describe('castRay & Raycaster.detect', () => {
         const raycaster = new Raycaster(scene);
 
         // Origin at center of tile (col 2, row 2) = (80, 80)
-        // Default angle=0 (right), type='any' -> hits wall at x=128 -> distance = 48
-        expect(raycaster.detect(80, 80, level)).toBe(48);
+        // Default angle=0 (right), type='any' -> hits wall at x=128 -> 48px = 1.5 tiles = 15 units
+        expect(raycaster.detect(80, 80, level)).toBe(15);
 
-        // Angle=90 (up), type='ground' -> hits ceiling bottom at y=32 -> distance = 48
-        expect(raycaster.detect(80, 80, level, [], 90, 'ground')).toBe(48);
+        // Angle=90 (up), type='ground' -> hits ceiling bottom at y=32 -> 48px = 15 units
+        expect(raycaster.detect(80, 80, level, [], 90, 'ground')).toBe(15);
 
-        // Angle=180 (left) -> hits the left edge of the level (x=0) as 'ground' -> distance = 80
-        expect(raycaster.detect(80, 80, level, [], 180, 'ground')).toBe(80);
+        // Angle=180 (left) -> hits the left edge of the level (x=0) as 'ground' -> 80px = 2.5 tiles = 25 units
+        expect(raycaster.detect(80, 80, level, [], 180, 'ground')).toBe(25);
 
         // Angle=270 (down) -> nothing there -> undefined (and <= comparisons are safely false)
         const miss = raycaster.detect(80, 80, level, [], 270, 'ground');
@@ -176,7 +176,7 @@ describe('castRay & Raycaster.detect', () => {
     });
 
     test('classifies the left and right level edges as ground', () => {
-        // Empty 5x5 level (160x160 pixels)
+        // Empty 5x5 level (160x160 pixels = 50x50 units)
         const level = createMockLevel([
             [0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0],
@@ -187,15 +187,15 @@ describe('castRay & Raycaster.detect', () => {
         const { scene } = createMockScene();
         const raycaster = new Raycaster(scene);
 
-        // From (60, 80): left edge at x=0 is 60px away; right edge at x=160 is 100px away
-        expect(raycaster.detect(60, 80, level, [], 180, 'ground')).toBe(60);
-        expect(raycaster.detect(60, 80, level, [], 0, 'ground')).toBe(100);
-        expect(raycaster.detect(60, 80, level, [], 0, 'any')).toBe(100);
-        expect(raycaster.detect(60, 80, level, [], 0, 'goal')).toBeUndefined();
+        // From (64, 80): left edge at x=0 is 2 tiles (20 units); right edge at x=160 is 3 tiles (30 units)
+        expect(raycaster.detect(64, 80, level, [], 180, 'ground')).toBe(20);
+        expect(raycaster.detect(64, 80, level, [], 0, 'ground')).toBe(30);
+        expect(raycaster.detect(64, 80, level, [], 0, 'any')).toBe(30);
+        expect(raycaster.detect(64, 80, level, [], 0, 'goal')).toBeUndefined();
 
         // Straight up and straight down do not hit the side edges
-        expect(raycaster.detect(60, 80, level, [], 90, 'ground')).toBeUndefined();
-        expect(raycaster.detect(60, 80, level, [], 270, 'ground')).toBeUndefined();
+        expect(raycaster.detect(64, 80, level, [], 90, 'ground')).toBeUndefined();
+        expect(raycaster.detect(64, 80, level, [], 270, 'ground')).toBeUndefined();
     });
 
     test('wraps negative angles clockwise and angles > 360', () => {
@@ -210,11 +210,11 @@ describe('castRay & Raycaster.detect', () => {
         const { scene } = createMockScene();
         const raycaster = new Raycaster(scene);
 
-        // -90 wraps to 270 (straight down) -> hits y=128 from y=80 -> distance = 48
-        expect(raycaster.detect(80, 80, level, [], -90, 'ground')).toBe(48);
+        // -90 wraps to 270 (straight down) -> hits y=128 from y=80 -> 48px = 15 units
+        expect(raycaster.detect(80, 80, level, [], -90, 'ground')).toBe(15);
 
-        // 360 + 0 wraps to 0 (straight right) -> hits x=128 from x=80 -> distance = 48
-        expect(raycaster.detect(80, 80, level, [], 360, 'ground')).toBe(48);
+        // 360 + 0 wraps to 0 (straight right) -> hits x=128 from x=80 -> 48px = 15 units
+        expect(raycaster.detect(80, 80, level, [], 360, 'ground')).toBe(15);
     });
 
     test('filters by type and returns null if first hit is a different type', () => {
@@ -229,12 +229,12 @@ describe('castRay & Raycaster.detect', () => {
         const { scene } = createMockScene();
         const raycaster = new Raycaster(scene);
 
-        // Goal placed IN FRONT of the wall at x: 96..112, y: 64..96 (distance = 16 from x=80)
+        // Goal placed IN FRONT of the wall at x: 96..112, y: 64..96 (16px = 0.5 tiles = 5 units from x=80)
         const goalInFront: DetectObjectTarget[] = [
             { type: 'goal', x: 96, y: 64, width: 16, height: 32 },
         ];
-        expect(raycaster.detect(80, 80, level, goalInFront, 0, 'any')).toBe(16);
-        expect(raycaster.detect(80, 80, level, goalInFront, 0, 'goal')).toBe(16);
+        expect(raycaster.detect(80, 80, level, goalInFront, 0, 'any')).toBe(5);
+        expect(raycaster.detect(80, 80, level, goalInFront, 0, 'goal')).toBe(5);
         // Looking for ground, but goal is hit first -> undefined
         expect(raycaster.detect(80, 80, level, goalInFront, 0, 'ground')).toBeUndefined();
 
@@ -244,7 +244,7 @@ describe('castRay & Raycaster.detect', () => {
         ];
         // Looking for goal, but wall is hit first -> undefined
         expect(raycaster.detect(80, 80, level, goalBehind, 0, 'goal')).toBeUndefined();
-        expect(raycaster.detect(80, 80, level, goalBehind, 0, 'ground')).toBe(48);
+        expect(raycaster.detect(80, 80, level, goalBehind, 0, 'ground')).toBe(15);
     });
 
     test('intersects 45-degree ramp geometry accurately instead of full tile box', () => {
@@ -263,102 +263,102 @@ describe('castRay & Raycaster.detect', () => {
         expect(hit!.distance).toBeCloseTo(64, 5); // 80 - 16 = 64
     });
 
-        test('draws a fading white line with per-angle cooldown and cleans up', () => {
-            const level = createMockLevel([
-                [0, 0, 1],
-            ]);
-            const { scene, clock, graphicsInstances, tweenConfigs } = createMockScene();
-            const raycaster = new Raycaster(scene);
+    test('draws a fading white line with per-angle cooldown and cleans up', () => {
+        const level = createMockLevel([
+            [0, 0, 1],
+        ]);
+        const { scene, clock, graphicsInstances, tweenConfigs } = createMockScene();
+        const raycaster = new Raycaster(scene);
 
-            raycaster.detect(16, 16, level, [], 0, 'ground');
+        raycaster.detect(16, 16, level, [], 0, 'ground');
 
-            expect(graphicsInstances).toHaveLength(1);
-            expect(graphicsInstances[0].lineStyle).toHaveBeenCalledWith(2, 0xffffff, 0.9);
-            expect(graphicsInstances[0].lineBetween).toHaveBeenCalledWith(16, 16, 64, 16);
-            expect(tweenConfigs).toHaveLength(1);
-            expect(tweenConfigs[0].alpha).toBe(0);
-            expect(tweenConfigs[0].duration).toBe(260);
+        expect(graphicsInstances).toHaveLength(1);
+        expect(graphicsInstances[0].lineStyle).toHaveBeenCalledWith(2, 0xffffff, 0.9);
+        expect(graphicsInstances[0].lineBetween).toHaveBeenCalledWith(16, 16, 64, 16);
+        expect(tweenConfigs).toHaveLength(1);
+        expect(tweenConfigs[0].alpha).toBe(0);
+        expect(tweenConfigs[0].duration).toBe(260);
 
-            // Calling again within cooldown (100ms later) still returns distance but skips drawing
-            clock.now += 100;
-            expect(raycaster.detect(16, 16, level, [], 360, 'ground')).toBe(48);
-            expect(graphicsInstances).toHaveLength(1);
+        // Calling again within cooldown (100ms later) still returns distance (15 units) but skips drawing
+        clock.now += 100;
+        expect(raycaster.detect(16, 16, level, [], 360, 'ground')).toBe(15);
+        expect(graphicsInstances).toHaveLength(1);
 
-            // After cooldown elapses (300ms total), draws a new ray and replaces any previous one
-            clock.now += 200;
-            expect(raycaster.detect(16, 16, level, [], 0, 'ground')).toBe(48);
-            expect(graphicsInstances).toHaveLength(2);
-            expect(graphicsInstances[0].destroy).toHaveBeenCalledOnce();
+        // After cooldown elapses (300ms total), draws a new ray and replaces any previous one
+        clock.now += 200;
+        expect(raycaster.detect(16, 16, level, [], 0, 'ground')).toBe(15);
+        expect(graphicsInstances).toHaveLength(2);
+        expect(graphicsInstances[0].destroy).toHaveBeenCalledOnce();
 
-            // Simulate second tween finishing
-            tweenConfigs[1].onComplete?.();
-            expect(graphicsInstances[1].destroy).toHaveBeenCalledOnce();
+        // Simulate second tween finishing
+        tweenConfigs[1].onComplete?.();
+        expect(graphicsInstances[1].destroy).toHaveBeenCalledOnce();
 
-            // clearVisuals resets cooldown and cleans up active rays immediately
-            raycaster.clearVisuals();
-            raycaster.detect(16, 16, level, [], 0, 'ground');
-            expect(graphicsInstances).toHaveLength(3);
-            raycaster.clearVisuals();
-            expect(graphicsInstances[2].destroy).toHaveBeenCalledOnce();
+        // clearVisuals resets cooldown and cleans up active rays immediately
+        raycaster.clearVisuals();
+        raycaster.detect(16, 16, level, [], 0, 'ground');
+        expect(graphicsInstances).toHaveLength(3);
+        raycaster.clearVisuals();
+        expect(graphicsInstances[2].destroy).toHaveBeenCalledOnce();
 
-            // Misses and wrong-type hits should not draw a ray
-            expect(raycaster.detect(16, 16, level, [], 90, 'ground')).toBeUndefined();
-            expect(raycaster.detect(16, 16, level, [], 0, 'goal')).toBeUndefined();
-            expect(graphicsInstances).toHaveLength(3);
-        });
+        // Misses and wrong-type hits should not draw a ray
+        expect(raycaster.detect(16, 16, level, [], 90, 'ground')).toBeUndefined();
+        expect(raycaster.detect(16, 16, level, [], 0, 'goal')).toBeUndefined();
+        expect(graphicsInstances).toHaveLength(3);
+    });
 
-        test('returns boolean when maxDistance is provided and draws ray only on true', () => {
-            // Wall at col 2 -> x: 64..96, so distance from x=16 is 48
-            const level = createMockLevel([[0, 0, 1]]);
-            const { scene, clock, graphicsInstances } = createMockScene();
-            const raycaster = new Raycaster(scene);
+    test('returns boolean when maxDistance is provided and draws ray only on true', () => {
+        // Wall at col 2 -> x: 64..96, so distance from x=16 is 48px = 15 units
+        const level = createMockLevel([[0, 0, 1]]);
+        const { scene, clock, graphicsInstances } = createMockScene();
+        const raycaster = new Raycaster(scene);
 
-            // Farther than maxDistance -> false, no ray drawn
-            expect(raycaster.detect(16, 16, level, [], 0, 'ground', 47)).toBe(false);
-            expect(graphicsInstances).toHaveLength(0);
+        // Farther than maxDistance (15 > 14) -> false, no ray drawn
+        expect(raycaster.detect(16, 16, level, [], 0, 'ground', 14)).toBe(false);
+        expect(graphicsInstances).toHaveLength(0);
 
-            // Wrong type within maxDistance -> false, no ray drawn
-            expect(raycaster.detect(16, 16, level, [], 0, 'goal', 100)).toBe(false);
-            expect(graphicsInstances).toHaveLength(0);
+        // Wrong type within maxDistance -> false, no ray drawn
+        expect(raycaster.detect(16, 16, level, [], 0, 'goal', 50)).toBe(false);
+        expect(graphicsInstances).toHaveLength(0);
 
-            // Miss (straight up) -> false, no ray drawn
-            expect(raycaster.detect(16, 16, level, [], 90, 'ground', 100)).toBe(false);
-            expect(graphicsInstances).toHaveLength(0);
+        // Miss (straight up) -> false, no ray drawn
+        expect(raycaster.detect(16, 16, level, [], 90, 'ground', 50)).toBe(false);
+        expect(graphicsInstances).toHaveLength(0);
 
-            // Exact boundary (48 <= 48) -> true, draws ray
-            expect(raycaster.detect(16, 16, level, [], 0, 'ground', 48)).toBe(true);
-            expect(graphicsInstances).toHaveLength(1);
+        // Exact boundary (15 <= 15) -> true, draws ray
+        expect(raycaster.detect(16, 16, level, [], 0, 'ground', 15)).toBe(true);
+        expect(graphicsInstances).toHaveLength(1);
 
-            // Within maxDistance after cooldown -> true, draws ray
-            clock.now += 300;
-            expect(raycaster.detect(16, 16, level, [], 0, 'ground', 100)).toBe(true);
-            expect(graphicsInstances).toHaveLength(2);
-        });
+        // Within maxDistance after cooldown -> true, draws ray
+        clock.now += 300;
+        expect(raycaster.detect(16, 16, level, [], 0, 'ground', 50)).toBe(true);
+        expect(graphicsInstances).toHaveLength(2);
+    });
 
-        test('compilePlayerCode exposes detect() in the player sandbox', async () => {
-            const detectMock = vi.fn().mockReturnValue(42);
-            const trackMock = vi.fn();
-            const script = compilePlayerCode(
-                `
+    test('compilePlayerCode exposes detect() in the player sandbox', async () => {
+        const detectMock = vi.fn().mockReturnValue(42);
+        const trackMock = vi.fn();
+        const script = compilePlayerCode(
+            `
             function start() {
                 const dist = detect(90, 'ground');
                 track('dist', dist);
             }
             `,
-                {
-                    moveRight: vi.fn(),
-                    moveLeft: vi.fn(),
-                    stop: vi.fn(),
-                    jump: vi.fn(),
-                    detect: detectMock,
-                    track: trackMock,
-                },
-                vi.fn()
-            );
+            {
+                moveRight: vi.fn(),
+                moveLeft: vi.fn(),
+                stop: vi.fn(),
+                jump: vi.fn(),
+                detect: detectMock,
+                track: trackMock,
+            },
+            vi.fn()
+        );
 
-            await script.start?.();
+        await script.start?.();
 
-            expect(detectMock).toHaveBeenCalledWith(90, 'ground');
-            expect(trackMock).toHaveBeenCalledWith('dist', 42);
-        });
+        expect(detectMock).toHaveBeenCalledWith(90, 'ground');
+        expect(trackMock).toHaveBeenCalledWith('dist', 42);
     });
+});

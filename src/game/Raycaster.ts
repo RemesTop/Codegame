@@ -3,6 +3,17 @@ import { LoadedLevel } from './LevelLoader';
 
 export type DetectTargetType = 'any' | 'ground' | 'goal' | string;
 
+/** Number of player-facing coordinate and distance units per tile (1 tile = 10 units). */
+export const UNITS_PER_TILE = 10;
+
+/**
+ * Converts a Phaser world pixel measurement into player-facing units (1 tile = 10 units).
+ */
+export function pixelsToUnits(pixels: number, tileSize: number = 32): number {
+    const safeTileSize = tileSize > 0 ? tileSize : 32;
+    return (pixels / safeTileSize) * UNITS_PER_TILE;
+}
+
 export interface DetectObjectTarget {
     type: string;
     x: number;
@@ -436,9 +447,10 @@ export class Raycaster {
 
     /**
      * Casts a ray from (originX, originY) at the given angle (0 = right, 90 = up).
-     * - Without `maxDistance`: returns the rounded pixel distance if the first hit matches
+     * Distances are measured in game units where 1 tile = 10 units.
+     * - Without `maxDistance`: returns the rounded distance in units if the first hit matches
      *   `type` (or `'any'`), otherwise `undefined`. Draws a fading white line on hit.
-     * - With `maxDistance`: returns `true` if a matching hit is within `maxDistance` pixels,
+     * - With `maxDistance`: returns `true` if a matching hit is within `maxDistance` units,
      *   otherwise `false`. Draws a fading white line only when `true`.
      */
     public detect(
@@ -468,7 +480,8 @@ export class Raycaster {
             return hasDistanceLimit ? false : undefined;
         }
 
-        const roundedDistance = Math.round(hit.distance);
+        const tileSize = level.map.tileWidth || 32;
+        const roundedDistance = Math.round(pixelsToUnits(hit.distance, tileSize));
 
         if (hasDistanceLimit) {
             const limit = Number(maxDistance);

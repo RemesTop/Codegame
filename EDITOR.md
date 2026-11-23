@@ -77,13 +77,13 @@ jump(); // jumps while moving right
 ```
 
 ### `detect(angle, type, maxDistance)`
-Shoots a sensor ray from the character in a chosen direction.
-* **Without `maxDistance`:** If it hits a matching tile or object, it draws a white line that fades out quickly and returns the distance in pixels. If nothing is hit or the first thing hit is a different type, no line is drawn and it returns `undefined`. Because it returns `undefined` on a miss, comparisons like `detect(0, 'ground') <= 50` safely evaluate to `false` when nothing is found.
-* **With `maxDistance`:** Returns `true` if a matching tile or object is within `maxDistance` pixels, or `false` otherwise. The fading white line is only drawn when it returns `true`.
+Shoots a sensor ray from the character in a chosen direction. Distances use the same scale as the hover coordinates in the bottom bar, where **1 tile = 10 units**.
+* **Without `maxDistance`:** If it hits a matching tile or object, it draws a white line that fades out quickly and returns the distance in units (1 tile = 10). If nothing is hit or the first thing hit is a different type, no line is drawn and it returns `undefined`. Because it returns `undefined` on a miss, comparisons like `detect(0, 'ground') <= 20` safely evaluate to `false` when nothing is found.
+* **With `maxDistance`:** Returns `true` if a matching tile or object is within `maxDistance` units, or `false` otherwise. The fading white line is only drawn when it returns `true`.
 
 * **`angle`** (optional, default `0`): Direction in degrees. `0` points straight right, `90` points straight up, `180` points straight left, and `270` points straight down. Negative numbers wrap clockwise from `360` (for example, `-20` becomes `340`, pointing slightly downward to the right), and numbers above `360` wrap around (for example, `370` becomes `10`).
 * **`type`** (optional, default `'any'`): What you want to detect. Supported types are `'any'` (first tile or object), `'ground'` (solid tiles, ramps, and the left/right edges of the level), and `'goal'` (the level goal).
-* **`maxDistance`** (optional): Maximum distance in pixels. When provided, `detect()` returns `true` or `false` instead of a number.
+* **`maxDistance`** (optional): Maximum distance in units (1 tile = 10). When provided, `detect()` returns `true` or `false` instead of a number.
 
 Example:
 ```javascript
@@ -91,8 +91,8 @@ let wallDist;
 track(wallDist);
 
 function update() {
-  wallDist = detect(0, 'ground'); // distance in pixels, or undefined
-  if (detect(-20, 'ground', 60)) { // true if ground is within 60px at -20 degrees
+  wallDist = detect(0, 'ground'); // distance in units (1 tile = 10), or undefined
+  if (detect(-20, 'ground', 20)) { // true if ground is within 2 tiles at -20 degrees
     jump();
   }
   moveRight();
