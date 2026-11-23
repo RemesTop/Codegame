@@ -56,6 +56,7 @@ function App() {
     const [isPaused, setIsPaused] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
+    const [hoverCoords, setHoverCoords] = useState<{ x: number; y: number } | null>(null);
 
     // --- Update run timer while code is executing ---
     useEffect(() => {
@@ -149,16 +150,22 @@ function App() {
             setIsLevelComplete(true);
         };
 
+        const onPointerCoords = (coords: { x: number; y: number } | null) => {
+            setHoverCoords(coords);
+        };
+
         EventBus.on("code-started", onCodeStarted);
         EventBus.on("code-stopped", onCodeStopped);
         EventBus.on("code-error", onCodeError);
         EventBus.on("level-complete", onLevelComplete);
+        EventBus.on("pointer-coords", onPointerCoords);
 
         return () => {
             EventBus.removeListener("code-started", onCodeStarted);
             EventBus.removeListener("code-stopped", onCodeStopped);
             EventBus.removeListener("code-error", onCodeError);
             EventBus.removeListener("level-complete", onLevelComplete);
+            EventBus.removeListener("pointer-coords", onPointerCoords);
         };
     }, []);
 
@@ -349,9 +356,16 @@ function App() {
                         )}
                     </div>
                     <div className="game-footer">
-                        <span className="game-footer-level">
-                            {currentLevel.name}
-                        </span>
+                        <div className="game-footer-info">
+                            <span className="game-footer-level">
+                                {currentLevel.name}
+                            </span>
+                            {hoverCoords && (
+                                <span className="game-footer-coords">
+                                    ({hoverCoords.x}, {hoverCoords.y})
+                                </span>
+                            )}
+                        </div>
                         <button
                             className="button btn-secondary"
                             onClick={isMenuOpen ? resumeGame : pauseGame}

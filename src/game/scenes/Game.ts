@@ -6,6 +6,7 @@ import { Player } from '../Player';
 import { LevelLoader, LoadedLevel } from '../LevelLoader';
 import { getLevelIdFromUrl } from '../Levels/levels';
 import { TilemapCollider } from '../TilemapCollider';
+import { DetectObjectTarget, pixelsToUnits, Raycaster } from '../Raycaster';
 
 export class Game extends Phaser.Scene {
     private player!: Player;
@@ -20,6 +21,7 @@ export class Game extends Phaser.Scene {
     // --- Sub-components ---
     private hud!: GameHUD;
     private codeRunner!: CodeRunner;
+    private raycaster!: Raycaster;
 
     constructor() {
         super('Game');
@@ -41,6 +43,7 @@ export class Game extends Phaser.Scene {
 
         // Initialize HUD for tracked variables in top-right corner
         this.hud = new GameHUD(this);
+        this.raycaster = new Raycaster(this);
 
         // Define the whitelisted API exposed to player code
         const api: RobotAPI = {
@@ -48,6 +51,8 @@ export class Game extends Phaser.Scene {
             moveLeft: () => this.player.moveLeft(),
             stop: () => this.player.stopMoving(),
             jump: () => this.player.jump(),
+            detect: (angle?: number, type?: string, maxDistance?: number) =>
+                this.detect(angle, type, maxDistance),
             track: (label: string, valueOrGetter?: any) =>
                 this.hud.registerTrack(label, valueOrGetter),
         };
@@ -59,6 +64,9 @@ export class Game extends Phaser.Scene {
 
         // --- Preview Camera Panning / Scrolling (active while frozen before Run) ---
         this.setupPreviewCameraControls();
+
+        // --- Hover World Coordinate Readout ---
+        this.setupHoverCoordTracking();
 
         // --- Phaser <-> React Communication ---
         EventBus.on('run-code', this.handleRunCode, this);
@@ -77,6 +85,7 @@ export class Game extends Phaser.Scene {
             EventBus.off('load-level', this.handleLoadLevel, this);
             EventBus.off('code-error', this.freezeSimulation, this);
             this.handleStopCode();
+            this.raycaster?.destroy();
             this.tilemapCollider?.destroy();
             this.tilemapCollider = null;
             this.goalMarker?.destroy();
@@ -93,6 +102,7 @@ export class Game extends Phaser.Scene {
      */
     public loadLevel(levelId: number): void {
         this.currentLevelId = levelId;
+        this.raycaster?.clearVisuals();
         this.tilemapCollider?.destroy();
         this.tilemapCollider = null;
         this.goalMarker?.destroy();
@@ -191,6 +201,46 @@ export class Game extends Phaser.Scene {
         });
     }
 
+    /**
+     * Tracks the pointer's world coordinates inside the game canvas and emits
+     * them to React so the footer can display `(x, y)` next to the level name.
+     */
+    private setupHoverCoordTracking(): void {
+        let lastX: number | null = null;
+        let lastY: number | null = null;
+
+        // Keep Phaser's cached canvas bounds in sync with CSS scaling on window resize
+        const onWindowResize = () => {
+            this.scale.updateBounds();
+        };
+        window.addEventListener('resize', onWindowResize);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            window.removeEventListener('resize', onWindowResize);
+        });
+
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+            const tileW = this.currentLevel?.map.tileWidth ?? 32;
+            const tileH = this.currentLevel?.map.tileHeight ?? 32;
+            const mapHeight = this.currentLevel?.map.heightInPixels ?? this.scale.height;
+            const x = Math.round(pixelsToUnits(worldPoint.x, tileW));
+            const y = Math.round(pixelsToUnits(mapHeight - worldPoint.y, tileH));
+            if (x !== lastX || y !== lastY) {
+                lastX = x;
+                lastY = y;
+                EventBus.emit('pointer-coords', { x, y });
+            }
+        });
+
+        this.input.on('gameout', () => {
+            if (lastX !== null || lastY !== null) {
+                lastX = null;
+                lastY = null;
+                EventBus.emit('pointer-coords', null);
+            }
+        });
+    }
+
     private scrollCameraBy(dx: number, dy: number): void {
         const cam = this.cameras.main;
         const bounds = cam.getBounds();
@@ -216,6 +266,38 @@ export class Game extends Phaser.Scene {
         if (!this.isSimulating || !this.player) return;
         this.player.update(delta);
         this.checkGoalReached();
+    }
+
+    private detect(
+        angle: number = 0,
+        type: string = 'any',
+        maxDistance?: number
+    ): number | boolean | undefined {
+        if (!this.player || !this.currentLevel || !this.raycaster) {
+            return maxDistance !== undefined ? false : undefined;
+        }
+
+        const objects: DetectObjectTarget[] = [];
+        if (this.goalMarker) {
+            const bounds = this.goalMarker.getBounds();
+            objects.push({
+                type: 'goal',
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+            });
+        }
+
+        return this.raycaster.detect(
+            this.player.x,
+            this.player.y,
+            this.currentLevel,
+            objects,
+            angle,
+            type,
+            maxDistance
+        );
     }
 
     private checkGoalReached(): void {
@@ -250,6 +332,7 @@ export class Game extends Phaser.Scene {
     private handleRunCode(rawCode: string) {
         if (this.isPaused) return;
         this.codeRunner.stop();
+        this.raycaster?.clearVisuals();
         this.tilemapCollider?.reset();
         this.player.reset();
         this.hud.reset();
@@ -263,6 +346,7 @@ export class Game extends Phaser.Scene {
         this.time.paused = false;
         this.codeRunner.stop();
         this.freezeSimulation();
+        this.raycaster?.clearVisuals();
         this.tilemapCollider?.reset();
         this.player.reset();
         this.hud.reset();
