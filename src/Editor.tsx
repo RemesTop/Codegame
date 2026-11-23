@@ -51,6 +51,11 @@ declare function moveLeft(): void;
 declare function stop(): void;
 
 /**
+ * Makes the character jump upward if it is currently standing on the ground or a ramp.
+ */
+declare function jump(): void;
+
+/**
  * Displays and tracks a variable in the top-right corner of the game view.
  * Call once during initialization to automatically track value changes on each tick.
  * 
