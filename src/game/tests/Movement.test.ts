@@ -1,29 +1,41 @@
 import { test, expect, vi } from 'vitest';
 
-const robot = {
-  setVelocityX: vi.fn(),
-};
+vi.mock('phaser', () => ({
+  Physics: {
+    Arcade: {
+      Sprite: class {},
+    },
+  },
+}));
 
-const api = {
-  moveRight: () => robot.setVelocityX(100),
-  moveLeft: () => robot.setVelocityX(-100),
-  stop: () => robot.setVelocityX(0),
-};
+import { Player } from '../Player';
 
-test('moveRight should move the robot to the right', () => {
-  api.moveRight();
+function createPlayer(): Player {
+  const player = Object.create(Player.prototype) as Player;
+  player.movementState = 'STOP';
+  return player;
+}
 
-  expect(robot.setVelocityX).toHaveBeenCalledWith(100);
+test('moveRight should set the player movement state to RIGHT', () => {
+  const player = createPlayer();
+
+  player.moveRight();
+
+  expect(player.movementState).toBe('RIGHT');
 });
 
-test('moveLeft should move the robot to the left', () => {
-  api.moveLeft();
+test('moveLeft should set the player movement state to LEFT', () => {
+  const player = createPlayer();
 
-  expect(robot.setVelocityX).toHaveBeenCalledWith(-100);
+  player.moveLeft();
+
+  expect(player.movementState).toBe('LEFT');
 });
 
-test('stop should stop the robot', () => {
-  api.stop();
+test('stopMoving should set the player movement state to STOP', () => {
+  const player = createPlayer();
 
-  expect(robot.setVelocityX).toHaveBeenCalledWith(0);
+  player.stopMoving();
+
+  expect(player.movementState).toBe('STOP');
 });
