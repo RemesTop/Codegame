@@ -66,11 +66,24 @@ body {
     border-top: 1px solid rgba(192, 171, 201, 0.35);
 }
 
+.game-footer-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .game-footer-level {
     font-size: 16px;
     font-weight: 700;
     letter-spacing: 0.02em;
     color: var(--accent-pink);
+}
+
+.game-footer-coords {
+    font-size: 14px;
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent-lavender);
 }
 
 .toolbar-timer {

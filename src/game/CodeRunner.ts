@@ -5,6 +5,7 @@ export interface RobotAPI {
     moveLeft: () => void;
     stop: () => void;
     jump: () => void;
+    detect: (angle?: number, type?: string, maxDistance?: number) => number | boolean | undefined;
     track: (label: string, valueOrGetter?: any) => void;
 }
 
@@ -347,6 +348,7 @@ export function compilePlayerCode(
         'moveLeft',
         'stop',
         'jump',
+        'detect',
         'track',
         'sleep',
         'window',
@@ -374,6 +376,7 @@ export function compilePlayerCode(
         api.moveLeft,
         api.stop,
         api.jump,
+        api.detect,
         api.track,
         sleepFn,
         undefined, // shadows window
