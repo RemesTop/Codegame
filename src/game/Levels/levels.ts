@@ -225,7 +225,10 @@ export function getLevelIdFromUrl(): number {
     const raw = new URLSearchParams(window.location.search).get('level');
     if (raw !== null && raw.trim() !== '') {
         const parsed = Number(raw);
-        if (Number.isInteger(parsed) && LEVELS.some((entry) => entry.id === parsed)) {
+        if (
+            Number.isInteger(parsed) &&
+            LEVELS.some((entry) => entry.id === parsed)
+        ) {
             return parsed;
         }
     }
@@ -233,7 +236,7 @@ export function getLevelIdFromUrl(): number {
     return LEVELS[0].id;
 }
 
-export type AppPage = 'game' | 'levels';
+export type AppPage = 'menu' | 'game' | 'levels' | 'instructions';
 
 /**
  * Reads the active page from the `?page=` URL query parameter.
@@ -244,7 +247,10 @@ export function getPageFromUrl(): AppPage {
     }
 
     const raw = new URLSearchParams(window.location.search).get('page');
-    return raw === 'levels' ? 'levels' : 'game';
+    if (raw === 'levels') return 'levels';
+    if (raw === 'game') return 'game';
+    if (raw === 'instructions') return 'instructions';
+    return 'menu';
 }
 
 /**
@@ -254,7 +260,7 @@ export function getPageFromUrl(): AppPage {
 export function setLevelIdInUrl(
     levelId: number,
     replace: boolean = false,
-    page: AppPage = 'game'
+    page: AppPage = 'game',
 ): void {
     if (typeof window === 'undefined') {
         return;
@@ -262,17 +268,13 @@ export function setLevelIdInUrl(
 
     const url = new URL(window.location.href);
     const nextLevel = String(levelId);
-    const nextPage = page === 'levels' ? 'levels' : null;
+    const nextPage = page;
     const alreadyMatches =
         url.searchParams.get('level') === nextLevel &&
         url.searchParams.get('page') === nextPage;
 
     url.searchParams.set('level', nextLevel);
-    if (nextPage) {
-        url.searchParams.set('page', nextPage);
-    } else {
-        url.searchParams.delete('page');
-    }
+    url.searchParams.set('page', nextPage);
 
     if (replace || alreadyMatches) {
         window.history.replaceState({ levelId, page }, '', url.toString());

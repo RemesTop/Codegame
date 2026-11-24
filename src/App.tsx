@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { IRefPhaserGame, PhaserGame } from "./PhaserGame";
-import { Editor } from "./Editor";
-import { LevelSelect } from "./LevelSelect";
-import { EventBus } from "./game/EventBus";
+import { useEffect, useRef, useState } from 'react';
+import { IRefPhaserGame, PhaserGame } from './PhaserGame';
+import { Editor } from './Editor';
+import { Instructions } from './Instructions';
+import { LevelSelect } from './LevelSelect';
+import MainMenu from './MainMenu';
+import { EventBus } from './game/EventBus';
 import {
     AppPage,
     getLevelDefinition,
@@ -10,8 +12,8 @@ import {
     getPageFromUrl,
     LEVELS,
     setLevelIdInUrl,
-} from "./game/Levels/levels";
-import { useBestTime, useSavedCode } from "./storage";
+} from './game/Levels/levels';
+import { useBestTime, useSavedCode } from './storage';
 
 function formatElapsedTime(ms: number): string {
     const clampedMs = Math.max(0, Math.floor(ms));
@@ -19,13 +21,14 @@ function formatElapsedTime(ms: number): string {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     const hundredths = Math.floor((clampedMs % 1000) / 10);
-    return `${minutes}:${String(seconds).padStart(2, "0")}.${String(hundredths).padStart(2, "0")}`;
+    return `${minutes}:${String(seconds).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
 }
 
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const runStartTimeRef = useRef<number | null>(null);
     const lastRunMsRef = useRef<number>(0);
+    const levelSelectReturnPageRef = useRef<'menu' | 'game'>('menu');
     const [page, setPage] = useState<AppPage>(() => getPageFromUrl());
     const [currentLevelId, setCurrentLevelId] = useState<number>(() =>
         getLevelIdFromUrl(),
@@ -90,12 +93,12 @@ function App() {
             setIsLevelComplete(false);
             setIsNewBestTime(false);
             setErrorMessage(null);
-            EventBus.emit("load-level", urlLevelId);
+            EventBus.emit('load-level', urlLevelId);
         };
 
-        window.addEventListener("popstate", onPopState);
+        window.addEventListener('popstate', onPopState);
         return () => {
-            window.removeEventListener("popstate", onPopState);
+            window.removeEventListener('popstate', onPopState);
         };
     }, []);
 
@@ -136,7 +139,7 @@ function App() {
         const onLevelComplete = (completedLevelId?: number) => {
             freezeTimer();
             const targetLevelId =
-                typeof completedLevelId === "number"
+                typeof completedLevelId === 'number'
                     ? completedLevelId
                     : currentLevelIdRef.current;
             const isNewBest = recordBestTimeRef.current(
@@ -149,16 +152,16 @@ function App() {
             setIsLevelComplete(true);
         };
 
-        EventBus.on("code-started", onCodeStarted);
-        EventBus.on("code-stopped", onCodeStopped);
-        EventBus.on("code-error", onCodeError);
-        EventBus.on("level-complete", onLevelComplete);
+        EventBus.on('code-started', onCodeStarted);
+        EventBus.on('code-stopped', onCodeStopped);
+        EventBus.on('code-error', onCodeError);
+        EventBus.on('level-complete', onLevelComplete);
 
         return () => {
-            EventBus.removeListener("code-started", onCodeStarted);
-            EventBus.removeListener("code-stopped", onCodeStopped);
-            EventBus.removeListener("code-error", onCodeError);
-            EventBus.removeListener("level-complete", onLevelComplete);
+            EventBus.removeListener('code-started', onCodeStarted);
+            EventBus.removeListener('code-stopped', onCodeStopped);
+            EventBus.removeListener('code-error', onCodeError);
+            EventBus.removeListener('level-complete', onLevelComplete);
         };
     }, []);
 
@@ -168,14 +171,14 @@ function App() {
         setErrorMessage(null);
         setIsLevelComplete(false);
         setIsPaused(false);
-        EventBus.emit("run-code", code);
+        EventBus.emit('run-code', code);
     };
 
     // Send stop request to the Phaser scene
     const handleStop = () => {
         setIsLevelComplete(false);
         setIsPaused(false);
-        EventBus.emit("stop-code");
+        EventBus.emit('stop-code');
     };
 
     // Reset current level simulation back to spawn
@@ -185,7 +188,7 @@ function App() {
         setIsPaused(false);
         setIsLevelComplete(false);
         setErrorMessage(null);
-        EventBus.emit("stop-code");
+        EventBus.emit('stop-code');
     };
 
     // Switch to the next level and load its own saved code
@@ -197,20 +200,31 @@ function App() {
         setIsLevelComplete(false);
         setErrorMessage(null);
         setCurrentLevelId(nextLevel.id);
-        setLevelIdInUrl(nextLevel.id, false, "game");
-        EventBus.emit("load-level", nextLevel.id);
+        setLevelIdInUrl(nextLevel.id, false, 'game');
+        EventBus.emit('load-level', nextLevel.id);
     };
 
-    const handleOpenLevelSelect = () => {
-        EventBus.emit("stop-code");
+    const handleOpenLevelSelect = (returnPage: 'menu' | 'game') => {
+        levelSelectReturnPageRef.current = returnPage;
+        EventBus.emit('stop-code');
         runStartTimeRef.current = null;
         setElapsedMs(0);
         setIsMenuOpen(false);
         setIsPaused(false);
         setIsLevelComplete(false);
         setErrorMessage(null);
-        setPage("levels");
-        setLevelIdInUrl(currentLevelId, false, "levels");
+        setPage('levels');
+        setLevelIdInUrl(currentLevelId, false, 'levels');
+    };
+
+    const handleOpenInstructions = () => {
+        setPage('instructions');
+        setLevelIdInUrl(currentLevelId, false, 'instructions');
+    };
+
+    const handleBackFromInstructions = () => {
+        setPage('menu');
+        setLevelIdInUrl(currentLevelId, false, 'menu');
     };
 
     const handleSelectLevel = (levelId: number) => {
@@ -221,15 +235,28 @@ function App() {
         setIsLevelComplete(false);
         setErrorMessage(null);
         setCurrentLevelId(levelId);
-        setPage("game");
-        setLevelIdInUrl(levelId, false, "game");
-        EventBus.emit("load-level", levelId);
+        setPage('game');
+        setLevelIdInUrl(levelId, false, 'game');
+        EventBus.emit('load-level', levelId);
     };
 
     const handleBackFromLevelSelect = () => {
-        setPage("game");
+        const returnPage = levelSelectReturnPageRef.current;
+        setPage(returnPage);
         setIsPaused(false);
-        setLevelIdInUrl(currentLevelId, false, "game");
+        setLevelIdInUrl(currentLevelId, false, returnPage);
+    };
+
+    const handleOpenMainMenu = () => {
+        EventBus.emit('stop-code');
+        runStartTimeRef.current = null;
+        setElapsedMs(0);
+        setIsMenuOpen(false);
+        setIsPaused(false);
+        setIsLevelComplete(false);
+        setErrorMessage(null);
+        setPage('menu');
+        setLevelIdInUrl(currentLevelId, false, 'menu');
     };
 
     const pauseGame = () => {
@@ -239,7 +266,7 @@ function App() {
             setElapsedMs(lastRunMsRef.current);
             runStartTimeRef.current = null;
         }
-        EventBus.emit("pause-code");
+        EventBus.emit('pause-code');
         setIsPaused(true);
         setIsMenuOpen(true);
     };
@@ -249,14 +276,25 @@ function App() {
             setIsMenuOpen(false);
             return;
         }
-        EventBus.emit("resume-code");
+        EventBus.emit('resume-code');
         setIsPaused(false);
         setIsMenuOpen(false);
     };
 
     return (
         <>
-            {page === "levels" && (
+            {page === 'menu' && (
+                <MainMenu
+                    onOpenLevelSelect={() => handleOpenLevelSelect('menu')}
+                    onOpenInstructions={handleOpenInstructions}
+                />
+            )}
+
+            {page === 'instructions' && (
+                <Instructions onBack={handleBackFromInstructions} />
+            )}
+
+            {page === 'levels' && (
                 <LevelSelect
                     levels={LEVELS}
                     currentLevelId={currentLevelId}
@@ -267,7 +305,7 @@ function App() {
 
             <div
                 id="app"
-                style={{ display: page === "game" ? "flex" : "none" }}
+                style={{ display: page === 'game' ? 'flex' : 'none' }}
             >
                 {/* Left side: Phaser Game Viewport */}
                 <div className="game-view">
@@ -281,7 +319,9 @@ function App() {
                                         {currentLevel.name.toUpperCase()}
                                     </h3>
                                     <div className="level-complete-times">
-                                        <p>Time: {formatElapsedTime(elapsedMs)}</p>
+                                        <p>
+                                            Time: {formatElapsedTime(elapsedMs)}
+                                        </p>
                                         {isNewBestTime && (
                                             <p className="level-complete-best">
                                                 New best time!
@@ -302,27 +342,30 @@ function App() {
                                         >
                                             {nextLevel
                                                 ? `Go to ${nextLevel.name}`
-                                                : "All Levels Complete"}
+                                                : 'All Levels Complete'}
+                                        </button>
+                                        <button
+                                            className="button btn-secondary"
+                                            onClick={handleOpenMainMenu}
+                                        >
+                                            Main menu
                                         </button>
                                     </div>
                                 </div>
                             </div>
                         )}
                         {isMenuOpen && (
-                            <div
-                                className="modal-overlay"
-                                onClick={resumeGame}
-                            >
+                            <div className="modal-overlay" onClick={resumeGame}>
                                 <div
                                     className="modal menu-modal"
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     <h2>Pause</h2>
                                     <p className="menu-best-time">
-                                        Best time:{" "}
+                                        Best time:{' '}
                                         {bestTimeMs !== null
                                             ? formatElapsedTime(bestTimeMs)
-                                            : "--:--.--"}
+                                            : '--:--.--'}
                                     </p>
                                     <div className="menu-actions">
                                         <button
@@ -333,13 +376,15 @@ function App() {
                                         </button>
                                         <button
                                             className="button btn-secondary"
-                                            onClick={handleOpenLevelSelect}
+                                            onClick={() =>
+                                                handleOpenLevelSelect('game')
+                                            }
                                         >
                                             Level select
                                         </button>
                                         <button
                                             className="button btn-secondary"
-                                            disabled
+                                            onClick={handleOpenMainMenu}
                                         >
                                             Main menu
                                         </button>
@@ -356,7 +401,7 @@ function App() {
                             className="button btn-secondary"
                             onClick={isMenuOpen ? resumeGame : pauseGame}
                         >
-                            {isPaused ? "Resume" : "Pause"}
+                            {isPaused ? 'Resume' : 'Pause'}
                         </button>
                     </div>
                 </div>
@@ -365,16 +410,16 @@ function App() {
                 <div className="editor-view">
                     <div className="editor-toolbar">
                         <button
-                            className={`button ${isRunning ? "btn-stop" : "btn-run"}`}
+                            className={`button ${isRunning ? 'btn-stop' : 'btn-run'}`}
                             onClick={isRunning ? handleStop : handleRun}
                             disabled={!isRunning && isPaused}
                         >
-                            {isRunning ? "⏹ Stop" : "▶ Run"}
+                            {isRunning ? '⏹ Stop' : '▶ Run'}
                         </button>
                         <span
-                            className={`status-text ${isRunning ? "running" : ""}`}
+                            className={`status-text ${isRunning ? 'running' : ''}`}
                         >
-                            {isRunning ? "● Running" : "○ Stopped"}
+                            {isRunning ? '● Running' : '○ Stopped'}
                         </span>
                         <span className="toolbar-timer">
                             {formatElapsedTime(elapsedMs)}
@@ -419,20 +464,24 @@ function App() {
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     <p>
-                                        Are you sure you want to reset the editor
-                                        back to the starter code?
+                                        Are you sure you want to reset the
+                                        editor back to the starter code?
                                     </p>
                                     <div className="modal-actions">
                                         <button
                                             className="button"
-                                            onClick={() => setShowConfirm(false)}
+                                            onClick={() =>
+                                                setShowConfirm(false)
+                                            }
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             className="button btn-stop"
                                             onClick={() => {
-                                                setCode(currentLevel.starterCode);
+                                                setCode(
+                                                    currentLevel.starterCode,
+                                                );
                                                 setShowConfirm(false);
                                             }}
                                         >
