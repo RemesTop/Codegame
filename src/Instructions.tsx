@@ -57,7 +57,7 @@ export function Instructions({ onBack }: InstructionsProps) {
                             standing on a solid object.
                         </li>
                         <li>
-                            <code>Detect(angle, target, maxDistance)</code>{' '}
+                            <code>detect(angle, target, maxDistance)</code>{' '}
                             looks into the given angle to the maxDistance and
                             returns whether it found the target (ground, others
                             added later?).
