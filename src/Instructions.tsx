@@ -53,7 +53,7 @@ export function Instructions({ onBack }: InstructionsProps) {
                             <code>stop()</code> makes the robot stop in place.
                         </li>
                         <li>
-                            <code>Jump()</code> makes the robot jump if it is
+                            <code>jump()</code> makes the robot jump if it is
                             standing on a solid object.
                         </li>
                         <li>
