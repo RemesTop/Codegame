@@ -50,7 +50,7 @@ export function Instructions({ onBack }: InstructionsProps) {
                             until otherwise stated.
                         </li>
                         <li>
-                            <code>Stop()</code> makes the robot stop in place.
+                            <code>stop()</code> makes the robot stop in place.
                         </li>
                         <li>
                             <code>Jump()</code> makes the robot jump if it is
