@@ -30,6 +30,7 @@ function createMockLevel(
         rampRightGids?: number[];
         ceilingRampLeftGids?: number[];
         ceilingRampRightGids?: number[];
+        dangerGids?: number[];
         tileSize?: number;
     }
 ): LoadedLevel {
@@ -67,6 +68,7 @@ function createMockLevel(
         rampRightGids: new Set(options?.rampRightGids ?? [3]),
         ceilingRampLeftGids: new Set(options?.ceilingRampLeftGids ?? [4]),
         ceilingRampRightGids: new Set(options?.ceilingRampRightGids ?? [5]),
+        dangerGids: new Set(options?.dangerGids ?? [6]),
         spawn: { x: 0, y: 0 },
         goal: null,
         destroy: vi.fn(),
@@ -360,5 +362,20 @@ describe('castRay & Raycaster.detect', () => {
 
         expect(detectMock).toHaveBeenCalledWith(90, 'ground');
         expect(trackMock).toHaveBeenCalledWith('dist', 42);
+    });
+
+    test('detects danger tiles with type "danger" and "any"', () => {
+        // Danger tile (gid=6) at col 3, solid wall (gid=1) behind it at col 4
+        const level = createMockLevel([
+            [0, 0, 0, 6, 1],
+        ]);
+        const { scene } = createMockScene();
+        const raycaster = new Raycaster(scene);
+
+        // Origin at (16, 16) -> danger tile starts at x=96 -> 80px = 2.5 tiles = 25 units
+        expect(raycaster.detect(16, 16, level, [], 0, 'danger')).toBe(25);
+        expect(raycaster.detect(16, 16, level, [], 0, 'any')).toBe(25);
+        // Danger tile blocks line-of-sight to the ground tile behind it
+        expect(raycaster.detect(16, 16, level, [], 0, 'ground')).toBeUndefined();
     });
 });

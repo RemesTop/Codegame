@@ -8,13 +8,15 @@ import level2Data from './Level-2.json';
  * - 'ramp-right': 45-degree floor slope facing right (falls from top-left to bottom-right).
  * - 'ceiling-ramp-left': 45-degree upside-down ceiling corner facing left (solid top-right, '\' underside).
  * - 'ceiling-ramp-right': 45-degree upside-down ceiling corner facing right (solid top-left, '/' underside).
+ * - 'danger': Full 32x32 hazardous tile that kills the player on contact.
  */
 export type TileShape =
     | 'solid'
     | 'ramp-left'
     | 'ramp-right'
     | 'ceiling-ramp-left'
-    | 'ceiling-ramp-right';
+    | 'ceiling-ramp-right'
+    | 'danger';
 
 export interface TilesetConfig {
     /** Tileset name matching the embedded tileset name in Tiled JSON. */
@@ -162,15 +164,16 @@ export const TILESETS: Record<string, TilesetConfig> = {
             12: 'solid',
             13: 'solid',
             14: 'solid',
-            15: 'ramp-right',
-            16: 'ramp-left',
+            21: 'ramp-right',
+            22: 'ramp-left',
             17: 'solid',
             18: 'solid',
             19: 'solid',
             20: 'solid',
-            21: 'ceiling-ramp-left',
-            22: 'ceiling-ramp-right',
+            30: 'ceiling-ramp-left',
+            31: 'ceiling-ramp-right',
             23: 'solid',
+            36: 'danger',
         },
     },
 };

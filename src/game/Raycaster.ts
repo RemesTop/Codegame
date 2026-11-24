@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { LoadedLevel } from './LevelLoader';
 
-export type DetectTargetType = 'any' | 'ground' | 'goal' | string;
+export type DetectTargetType = 'any' | 'ground' | 'goal' | 'danger' | string;
 
 /** Number of player-facing coordinate and distance units per tile (1 tile = 10 units). */
 export const UNITS_PER_TILE = 10;
@@ -337,6 +337,7 @@ export function castRay(
                     if (!tile || tile.index < 0) continue;
 
                     let t: number | null = null;
+                    let hitType: string = 'ground';
 
                     if (solidGidSet.has(tile.index)) {
                         t = rayIntersectAABB(
@@ -349,6 +350,18 @@ export function castRay(
                             tileRight,
                             tileBottom
                         );
+                    } else if (level.dangerGids?.has(tile.index)) {
+                        t = rayIntersectAABB(
+                            originX,
+                            originY,
+                            dx,
+                            dy,
+                            tileLeft,
+                            tileTop,
+                            tileRight,
+                            tileBottom
+                        );
+                        hitType = 'danger';
                     } else if (level.rampLeftGids.has(tile.index)) {
                         // '/' floor ramp: solid bottom-right triangle
                         t = rayIntersectTriangle(
@@ -401,7 +414,7 @@ export function castRay(
                             distance: t,
                             x: originX + dx * t,
                             y: originY + dy * t,
-                            type: 'ground',
+                            type: hitType,
                         };
                     }
                 }

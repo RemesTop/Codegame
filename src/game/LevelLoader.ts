@@ -24,6 +24,7 @@ export interface LoadedLevel {
     rampRightGids: Set<number>;
     ceilingRampLeftGids: Set<number>;
     ceilingRampRightGids: Set<number>;
+    dangerGids: Set<number>;
     spawn: { x: number; y: number };
     goal: GoalRegion | null;
     destroy: () => void;
@@ -153,6 +154,7 @@ export class LevelLoader {
         const rampRightGids = new Set<number>();
         const ceilingRampLeftGids = new Set<number>();
         const ceilingRampRightGids = new Set<number>();
+        const dangerGids = new Set<number>();
 
         for (const mapTileset of map.tilesets) {
             const config = TILESETS[mapTileset.name];
@@ -187,6 +189,8 @@ export class LevelLoader {
                     ceilingRampLeftGids.add(gid);
                 } else if (shape === 'ceiling-ramp-right') {
                     ceilingRampRightGids.add(gid);
+                } else if (shape === 'danger') {
+                    dangerGids.add(gid);
                 }
             }
         }
@@ -241,6 +245,7 @@ export class LevelLoader {
             rampRightGids,
             ceilingRampLeftGids,
             ceilingRampRightGids,
+            dangerGids,
             spawn,
             goal,
             destroy: () => {

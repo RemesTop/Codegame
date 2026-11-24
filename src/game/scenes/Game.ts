@@ -15,6 +15,9 @@ export class Game extends Phaser.Scene {
     private tilemapCollider: TilemapCollider | null = null;
     private goalMarker: Phaser.GameObjects.Rectangle | null = null;
     private isSimulating: boolean = false;
+    private isDying: boolean = false;
+    private deathTween: Phaser.Tweens.Tween | null = null;
+    private readonly deathFadeDurationMs: number = 1500;
     private isPaused: boolean = false;
     private resumeAsSimulating: boolean = false;
 
@@ -101,6 +104,7 @@ export class Game extends Phaser.Scene {
      * Loads a level by ID, spawns or repositions the player, and attaches tile/ramp collisions.
      */
     public loadLevel(levelId: number): void {
+        this.cancelDeathSequence();
         this.currentLevelId = levelId;
         this.raycaster?.clearVisuals();
         this.tilemapCollider?.destroy();
@@ -157,7 +161,7 @@ export class Game extends Phaser.Scene {
                 deltaX: number,
                 deltaY: number
             ) => {
-                if (this.isSimulating) return;
+                if (this.isSimulating || this.isDying) return;
 
                 const cam = this.cameras.main;
                 const bounds = cam.getBounds();
@@ -178,23 +182,23 @@ export class Game extends Phaser.Scene {
         );
 
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            if (this.isSimulating) return;
+            if (this.isSimulating || this.isDying) return;
             isDragging = true;
             lastPointerX = pointer.x;
             lastPointerY = pointer.y;
         });
 
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-            if (!isDragging || this.isSimulating || !pointer.isDown) {
-                isDragging = false;
-                return;
-            }
-            const dx = lastPointerX - pointer.x;
-            const dy = lastPointerY - pointer.y;
-            lastPointerX = pointer.x;
-            lastPointerY = pointer.y;
-            this.scrollCameraBy(dx, dy);
-        });
+                if (!isDragging || this.isSimulating || this.isDying || !pointer.isDown) {
+                    isDragging = false;
+                    return;
+                }
+                const dx = lastPointerX - pointer.x;
+                const dy = lastPointerY - pointer.y;
+                lastPointerX = pointer.x;
+                lastPointerY = pointer.y;
+                this.scrollCameraBy(dx, dy);
+            });
 
         this.input.on('pointerup', () => {
             isDragging = false;
@@ -265,6 +269,7 @@ export class Game extends Phaser.Scene {
     update(_time: number, delta: number) {
         if (!this.isSimulating || !this.player) return;
         this.player.update(delta);
+        if (this.checkDangerTouched()) return;
         this.checkGoalReached();
     }
 
@@ -300,6 +305,116 @@ export class Game extends Phaser.Scene {
         );
     }
 
+    /**
+     * Checks whether the player's hitbox overlaps any 'danger' tile on a colliding layer.
+     */
+    private isTouchingDangerTile(): boolean {
+        if (
+            !this.player ||
+            !this.currentLevel ||
+            this.currentLevel.dangerGids.size === 0
+        ) {
+            return false;
+        }
+
+        const body = this.player.body as Phaser.Physics.Arcade.Body | null;
+        let left: number;
+        let top: number;
+        let width: number;
+        let height: number;
+
+        if (body) {
+            left = body.position.x;
+            top = body.position.y;
+            width = body.width;
+            height = body.height;
+        } else {
+            const bounds = this.player.getBounds();
+            left = bounds.left;
+            top = bounds.top;
+            width = bounds.width;
+            height = bounds.height;
+        }
+
+        const right = left + width;
+        const bottom = top + height;
+
+        for (const layer of this.currentLevel.collidingLayers) {
+            const tiles = layer.getTilesWithinWorldXY(left, top, width, height, {
+                isNotEmpty: true,
+            });
+
+            for (const tile of tiles) {
+                if (!this.currentLevel.dangerGids.has(tile.index)) {
+                    continue;
+                }
+
+                const tileLeft = tile.getLeft();
+                const tileRight = tile.getRight();
+                const tileTop = tile.getTop();
+                const tileBottom = tile.getBottom();
+
+                if (
+                    right > tileLeft &&
+                    left < tileRight &&
+                    bottom > tileTop &&
+                    top < tileBottom
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private checkDangerTouched(): boolean {
+        if (!this.isSimulating || this.isDying) return false;
+        if (!this.isTouchingDangerTile()) return false;
+
+        this.triggerPlayerDeath();
+        return true;
+    }
+
+    /**
+     * Kills the player on touching a danger tile, slowly fades the sprite out,
+     * and resets the game once the fade-out finishes.
+     */
+    private triggerPlayerDeath(): void {
+        this.isDying = true;
+        this.codeRunner.stop();
+        this.player.stopMoving();
+        this.player.setVelocity(0, 0);
+        this.freezeSimulation();
+        EventBus.emit('code-stopped');
+
+        if (this.tweens?.add) {
+            this.deathTween = this.tweens.add({
+                targets: this.player,
+                alpha: 0,
+                duration: this.deathFadeDurationMs,
+                ease: 'Linear',
+                onComplete: () => {
+                    if (!this.isDying) return;
+                    this.deathTween = null;
+                    this.isDying = false;
+                    this.handleStopCode();
+                },
+            });
+        } else {
+            this.isDying = false;
+            this.handleStopCode();
+        }
+    }
+
+    private cancelDeathSequence(): void {
+        if (this.deathTween) {
+            this.deathTween.stop();
+            this.deathTween = null;
+        }
+        this.isDying = false;
+    }
+
     private checkGoalReached(): void {
         if (!this.isSimulating || !this.goalMarker) return;
 
@@ -331,6 +446,7 @@ export class Game extends Phaser.Scene {
 
     private handleRunCode(rawCode: string) {
         if (this.isPaused) return;
+        this.cancelDeathSequence();
         this.codeRunner.stop();
         this.raycaster?.clearVisuals();
         this.tilemapCollider?.reset();
@@ -341,6 +457,7 @@ export class Game extends Phaser.Scene {
     }
 
     private handleStopCode() {
+        this.cancelDeathSequence();
         this.isPaused = false;
         this.resumeAsSimulating = false;
         this.time.paused = false;
@@ -360,22 +477,26 @@ export class Game extends Phaser.Scene {
         this.isSimulating = false;
         this.physics.pause();
         this.time.paused = true;
+        this.deathTween?.pause();
         this.cameras.main.stopFollow();
     }
 
     private handleResumeCode() {
         this.isPaused = false;
         this.time.paused = false;
-        if (this.resumeAsSimulating) {
-            this.isSimulating = true;
-            this.physics.resume();
-            this.followPlayerCamera();
-        } else {
-            this.freezeSimulation();
+            if (this.isDying) {
+                this.deathTween?.resume();
+            } else if (this.resumeAsSimulating) {
+                this.isSimulating = true;
+                this.physics.resume();
+                this.followPlayerCamera();
+            } else {
+                this.freezeSimulation();
+            }
         }
-    }
 
     private handleLoadLevel(levelId: number) {
+        this.cancelDeathSequence();
         this.isPaused = false;
         this.resumeAsSimulating = false;
         this.time.paused = false;
