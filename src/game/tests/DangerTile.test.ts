@@ -29,14 +29,14 @@ vi.mock('phaser', () => ({
     },
     Physics: {
         Arcade: {
-            Sprite: class {},
+            Sprite: class { },
             Events: {
                 WORLD_STEP: 'worldstep',
             },
         },
     },
     Scene: class {
-        constructor(_key: string) {}
+        constructor(_key: string) { }
     },
 }));
 
@@ -46,7 +46,8 @@ import { Game } from '../scenes/Game';
 interface MockTween {
     config: {
         targets: unknown;
-        alpha: number;
+        alpha?: number;
+        x?: number;
         duration: number;
         ease: string;
         onComplete?: () => void;
@@ -60,9 +61,21 @@ function createDangerTestHarness(options: {
     playerBox: { x: number; y: number; width: number; height: number };
     dangerTiles: Array<{ index: number; left: number; top: number; size?: number }>;
     dangerGids?: number[];
+    enableSlideOverlay?: boolean;
 }) {
     const game = new Game();
     const createdTweens: MockTween[] = [];
+    const createdOverlays: Array<{
+        x: number;
+        y: number;
+        textureKey: string;
+        setOrigin: ReturnType<typeof vi.fn>;
+        setDisplaySize: ReturnType<typeof vi.fn>;
+        setScrollFactor: ReturnType<typeof vi.fn>;
+        setDepth: ReturnType<typeof vi.fn>;
+        destroy: ReturnType<typeof vi.fn>;
+    }> = [];
+    const existingTextures = new Set<string>();
 
     const player = {
         x: options.playerBox.x + options.playerBox.width / 2,
@@ -150,6 +163,47 @@ function createDangerTestHarness(options: {
         }),
     };
 
+    const extraSceneProps: Record<string, unknown> = {};
+    if (options.enableSlideOverlay) {
+        extraSceneProps.scale = { width: 1024, height: 768 };
+        extraSceneProps.textures = {
+            exists: vi.fn((key: string) => existingTextures.has(key)),
+            createCanvas: vi.fn((key: string) => {
+                existingTextures.add(key);
+                const gradient = { addColorStop: vi.fn() };
+                const ctx = {
+                    createLinearGradient: vi.fn(() => gradient),
+                    fillStyle: '',
+                    fillRect: vi.fn(),
+                };
+                return {
+                    getContext: () => ctx,
+                    refresh: vi.fn(),
+                };
+            }),
+        };
+        extraSceneProps.add = {
+            image: vi.fn((x: number, y: number, textureKey: string) => {
+                const overlay = {
+                    x,
+                    y,
+                    textureKey,
+                    setOrigin: vi.fn(),
+                    setDisplaySize: vi.fn(),
+                    setScrollFactor: vi.fn(),
+                    setDepth: vi.fn(),
+                    destroy: vi.fn(),
+                };
+                overlay.setOrigin.mockReturnValue(overlay);
+                overlay.setDisplaySize.mockReturnValue(overlay);
+                overlay.setScrollFactor.mockReturnValue(overlay);
+                overlay.setDepth.mockReturnValue(overlay);
+                createdOverlays.push(overlay);
+                return overlay;
+            }),
+        };
+    }
+
     Object.assign(game, {
         player,
         currentLevel: level,
@@ -162,6 +216,7 @@ function createDangerTestHarness(options: {
         cameras,
         time,
         tweens,
+        ...extraSceneProps,
     });
 
     return {
@@ -175,6 +230,7 @@ function createDangerTestHarness(options: {
         cameras,
         time,
         createdTweens,
+        createdOverlays,
     };
 }
 
@@ -206,31 +262,33 @@ describe('Danger tile configuration & death sequence', () => {
 
         game.update(0, 16);
 
-        // Immediately on touch: code stops, physics freezes, fade-out tween starts, reset has NOT happened yet
+        // Immediately on touch: code stops, physics freezes, fade-out tween starts,
+        // and button stays in Stop/Reset state (code-stopped not emitted until reset)
         expect(codeRunner.stop).toHaveBeenCalledOnce();
         expect(player.stopMoving).toHaveBeenCalledOnce();
         expect(player.setVelocity).toHaveBeenCalledWith(0, 0);
         expect(physics.pause).toHaveBeenCalledOnce();
-        expect(EventBus.emit).toHaveBeenCalledWith('code-stopped');
+        expect(EventBus.emit).not.toHaveBeenCalledWith('code-stopped');
         expect(player.reset).not.toHaveBeenCalled();
         expect(hud.reset).not.toHaveBeenCalled();
 
         expect(createdTweens).toHaveLength(1);
         expect(createdTweens[0].config.targets).toBe(player);
         expect(createdTweens[0].config.alpha).toBe(0);
-        expect(createdTweens[0].config.duration).toBeGreaterThanOrEqual(1000);
+        expect(createdTweens[0].config.duration).toBe(900);
 
         // Simulate the fade finishing
         player.alpha = 0;
         createdTweens[0].config.onComplete?.();
 
-        // Game resets cleanly after fade-out completes
+        // Game resets cleanly and emits code-stopped after fade-out completes
         expect(player.reset).toHaveBeenCalledOnce();
         expect(player.alpha).toBe(1);
         expect(hud.reset).toHaveBeenCalledOnce();
         expect(raycaster.clearVisuals).toHaveBeenCalledOnce();
         expect(tilemapCollider.reset).toHaveBeenCalledOnce();
         expect(cameras.main.centerOn).toHaveBeenCalledWith(20, 414);
+        expect(EventBus.emit).toHaveBeenCalledWith('code-stopped');
     });
 
     test('standing adjacent to a danger tile without overlapping does not kill the player', () => {
@@ -281,5 +339,82 @@ describe('Danger tile configuration & death sequence', () => {
         // Even if a stale onComplete fired, it must not reset the newly running game
         createdTweens[0].config.onComplete?.();
         expect(player.reset).toHaveBeenCalledOnce();
+    });
+
+    test('slides a feathered black fade across the screen on death reset and resets at full-black midpoint', () => {
+        const {
+            game,
+            player,
+            hud,
+            cameras,
+            createdTweens,
+            createdOverlays,
+        } = createDangerTestHarness({
+            playerBox: { x: 96, y: 440, width: 32, height: 48 },
+            dangerTiles: [{ index: 37, left: 96, top: 480 }],
+            enableSlideOverlay: true,
+        });
+
+        game.update(0, 16);
+        expect(createdTweens).toHaveLength(1);
+
+        // Complete player fade-out -> starts Phase 1 of sliding black fade; still not stopped yet
+        createdTweens[0].config.onComplete?.();
+        expect(createdOverlays).toHaveLength(1);
+        expect(createdOverlays[0].x).toBe(-1536);
+        expect(createdTweens).toHaveLength(2);
+        expect(createdTweens[1].config.x).toBe(-256);
+        expect(player.reset).not.toHaveBeenCalled();
+        expect(EventBus.emit).not.toHaveBeenCalledWith('code-stopped');
+
+        // Complete Phase 1 (screen is now 100% black) -> resets scene, emits code-stopped, and starts Phase 2 slide out
+        createdTweens[1].config.onComplete?.();
+        expect(player.reset).toHaveBeenCalledOnce();
+        expect(hud.reset).toHaveBeenCalledOnce();
+        expect(cameras.main.centerOn).toHaveBeenCalledWith(20, 414);
+        expect(EventBus.emit).toHaveBeenCalledWith('code-stopped');
+        expect(createdTweens).toHaveLength(3);
+        expect(createdTweens[2].config.x).toBe(1024);
+        expect(createdOverlays[0].destroy).not.toHaveBeenCalled();
+
+        // Complete Phase 2 -> destroys white overlay
+        createdTweens[2].config.onComplete?.();
+        expect(createdOverlays[0].destroy).toHaveBeenCalledOnce();
+    });
+
+    test('sliding black fade plays on Stop after a run, supports pause/resume, and cancels on Run', () => {
+        const {
+            game,
+            player,
+            physics,
+            createdTweens,
+            createdOverlays,
+        } = createDangerTestHarness({
+            playerBox: { x: 96, y: 400, width: 32, height: 48 },
+            dangerTiles: [],
+            enableSlideOverlay: true,
+        });
+
+        game['handleRunCode']('function update() {}');
+        expect(player.reset).toHaveBeenCalledTimes(1);
+
+        // Stopping a started run triggers the sliding white fade
+        game['handleStopCode']();
+        expect(createdOverlays).toHaveLength(1);
+        expect(createdTweens).toHaveLength(1);
+        expect(player.reset).toHaveBeenCalledTimes(1);
+
+        // Pause and resume during slide
+        game['handlePauseCode']();
+        expect(createdTweens[0].pause).toHaveBeenCalledOnce();
+        game['handleResumeCode']();
+        expect(createdTweens[0].resume).toHaveBeenCalledOnce();
+        expect(physics.resume).toHaveBeenCalledTimes(1); // Only from initial handleRunCode
+
+        // Running again mid-slide cancels the slide and destroys the overlay
+        game['handleRunCode']('function update() {}');
+        expect(createdTweens[0].stop).toHaveBeenCalledOnce();
+        expect(createdOverlays[0].destroy).toHaveBeenCalledOnce();
+        expect(player.reset).toHaveBeenCalledTimes(2);
     });
 });

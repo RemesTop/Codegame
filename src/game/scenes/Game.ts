@@ -16,8 +16,13 @@ export class Game extends Phaser.Scene {
     private goalMarker: Phaser.GameObjects.Rectangle | null = null;
     private isSimulating: boolean = false;
     private isDying: boolean = false;
+    private isResetting: boolean = false;
+    private hasRunStarted: boolean = false;
     private deathTween: Phaser.Tweens.Tween | null = null;
-    private readonly deathFadeDurationMs: number = 1500;
+    private resetTween: Phaser.Tweens.Tween | null = null;
+    private resetOverlay: Phaser.GameObjects.Image | null = null;
+    private readonly deathFadeDurationMs: number = 900;
+    private readonly resetSlideHalfDurationMs: number = 350;
     private isPaused: boolean = false;
     private resumeAsSimulating: boolean = false;
 
@@ -87,7 +92,7 @@ export class Game extends Phaser.Scene {
             EventBus.off('resume-code', this.handleResumeCode, this);
             EventBus.off('load-level', this.handleLoadLevel, this);
             EventBus.off('code-error', this.freezeSimulation, this);
-            this.handleStopCode();
+            this.handleStopCode(true);
             this.raycaster?.destroy();
             this.tilemapCollider?.destroy();
             this.tilemapCollider = null;
@@ -105,6 +110,8 @@ export class Game extends Phaser.Scene {
      */
     public loadLevel(levelId: number): void {
         this.cancelDeathSequence();
+        this.cancelResetTransition();
+        this.hasRunStarted = false;
         this.currentLevelId = levelId;
         this.raycaster?.clearVisuals();
         this.tilemapCollider?.destroy();
@@ -161,7 +168,7 @@ export class Game extends Phaser.Scene {
                 deltaX: number,
                 deltaY: number
             ) => {
-                if (this.isSimulating || this.isDying) return;
+                if (this.isSimulating || this.isDying || this.isResetting) return;
 
                 const cam = this.cameras.main;
                 const bounds = cam.getBounds();
@@ -182,23 +189,29 @@ export class Game extends Phaser.Scene {
         );
 
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            if (this.isSimulating || this.isDying) return;
+            if (this.isSimulating || this.isDying || this.isResetting) return;
             isDragging = true;
             lastPointerX = pointer.x;
             lastPointerY = pointer.y;
         });
 
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-                if (!isDragging || this.isSimulating || this.isDying || !pointer.isDown) {
-                    isDragging = false;
-                    return;
-                }
-                const dx = lastPointerX - pointer.x;
-                const dy = lastPointerY - pointer.y;
-                lastPointerX = pointer.x;
-                lastPointerY = pointer.y;
-                this.scrollCameraBy(dx, dy);
-            });
+            if (
+                !isDragging ||
+                this.isSimulating ||
+                this.isDying ||
+                this.isResetting ||
+                !pointer.isDown
+            ) {
+                isDragging = false;
+                return;
+            }
+            const dx = lastPointerX - pointer.x;
+            const dy = lastPointerY - pointer.y;
+            lastPointerX = pointer.x;
+            lastPointerY = pointer.y;
+            this.scrollCameraBy(dx, dy);
+        });
 
         this.input.on('pointerup', () => {
             isDragging = false;
@@ -377,8 +390,8 @@ export class Game extends Phaser.Scene {
     }
 
     /**
-     * Kills the player on touching a danger tile, slowly fades the sprite out,
-     * and resets the game once the fade-out finishes.
+     * Kills the player on touching a danger tile, fades the sprite out,
+     * and smoothly resets the level with a sliding black fade once finished.
      */
     private triggerPlayerDeath(): void {
         this.isDying = true;
@@ -386,7 +399,11 @@ export class Game extends Phaser.Scene {
         this.player.stopMoving();
         this.player.setVelocity(0, 0);
         this.freezeSimulation();
-        EventBus.emit('code-stopped');
+
+        const completeDeathReset = () => {
+            this.resetSceneState();
+            EventBus.emit('code-stopped');
+        };
 
         if (this.tweens?.add) {
             this.deathTween = this.tweens.add({
@@ -398,12 +415,12 @@ export class Game extends Phaser.Scene {
                     if (!this.isDying) return;
                     this.deathTween = null;
                     this.isDying = false;
-                    this.handleStopCode();
+                    this.playResetSlideTransition(completeDeathReset);
                 },
             });
         } else {
             this.isDying = false;
-            this.handleStopCode();
+            this.playResetSlideTransition(completeDeathReset);
         }
     }
 
@@ -413,6 +430,124 @@ export class Game extends Phaser.Scene {
             this.deathTween = null;
         }
         this.isDying = false;
+    }
+
+    /**
+     * Generates (once) a horizontal black gradient texture with soft feathered edges
+     * and a full-viewport solid black middle, so sliding it across the screen fades
+     * smoothly to black and back out while hiding the camera and spawn reset snap.
+     */
+    private ensureResetFadeTexture(viewWidth: number, feather: number): string | null {
+        if (!this.textures?.exists || !this.textures?.createCanvas) {
+            return null;
+        }
+
+        const totalWidth = viewWidth + feather * 2;
+        const textureKey = `reset-black-slide-${totalWidth}`;
+        if (this.textures.exists(textureKey)) {
+            return textureKey;
+        }
+
+        const canvasTex = this.textures.createCanvas(textureKey, totalWidth, 2);
+        if (!canvasTex) {
+            return null;
+        }
+
+        const ctx = canvasTex.getContext();
+        const gradient = ctx.createLinearGradient(0, 0, totalWidth, 0);
+        const leftStop = feather / totalWidth;
+        const rightStop = (feather + viewWidth) / totalWidth;
+
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(leftStop, 'rgba(0, 0, 0, 1)');
+        gradient.addColorStop(rightStop, 'rgba(0, 0, 0, 1)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, totalWidth, 2);
+        canvasTex.refresh();
+
+        return textureKey;
+    }
+
+    /**
+     * Slides a feathered black fade across the viewport from left to right.
+     * Invokes `onMidpointReset` once the viewport is completely black, then
+     * continues sliding out to the right to reveal the reset level.
+     */
+    private playResetSlideTransition(onMidpointReset: () => void): void {
+        this.cancelResetTransition();
+
+        const viewWidth = this.scale?.width || 1024;
+        const viewHeight = this.scale?.height || 768;
+        const feather = Math.round(viewWidth * 0.25);
+        const totalWidth = viewWidth + feather * 2;
+        const textureKey = this.ensureResetFadeTexture(viewWidth, feather);
+
+        if (!textureKey || !this.add?.image || !this.tweens?.add) {
+            onMidpointReset();
+            return;
+        }
+
+        const startX = -totalWidth;
+        const midX = -feather;
+        const endX = viewWidth;
+
+        const overlay = this.add
+            .image(startX, 0, textureKey)
+            .setOrigin(0, 0)
+            .setDisplaySize(totalWidth, viewHeight)
+            .setScrollFactor(0)
+            .setDepth(1000);
+
+        this.resetOverlay = overlay;
+        this.isResetting = true;
+
+        // Phase 1: Slide feathered black curtain in from left until screen is 100% black
+        this.resetTween = this.tweens.add({
+            targets: overlay,
+            x: midX,
+            duration: this.resetSlideHalfDurationMs,
+            ease: 'Quad.easeIn',
+            onComplete: () => {
+                if (!this.isResetting || this.resetOverlay !== overlay) return;
+
+                onMidpointReset();
+
+                // Phase 2: Continue sliding out to the right to smoothly reveal the reset level
+                this.resetTween = this.tweens.add({
+                    targets: overlay,
+                    x: endX,
+                    duration: this.resetSlideHalfDurationMs,
+                    ease: 'Quad.easeOut',
+                    onComplete: () => {
+                        if (this.resetOverlay !== overlay) return;
+                        this.cancelResetTransition();
+                    },
+                });
+            },
+        });
+    }
+
+    private cancelResetTransition(): void {
+        if (this.resetTween) {
+            this.resetTween.stop();
+            this.resetTween = null;
+        }
+        if (this.resetOverlay) {
+            this.resetOverlay.destroy();
+            this.resetOverlay = null;
+        }
+        this.isResetting = false;
+    }
+
+    private resetSceneState(): void {
+        this.hasRunStarted = false;
+        this.raycaster?.clearVisuals();
+        this.tilemapCollider?.reset();
+        this.player.reset();
+        this.hud.reset();
+        this.cameras.main.centerOn(this.player.x, this.player.y);
     }
 
     private checkGoalReached(): void {
@@ -447,6 +582,8 @@ export class Game extends Phaser.Scene {
     private handleRunCode(rawCode: string) {
         if (this.isPaused) return;
         this.cancelDeathSequence();
+        this.cancelResetTransition();
+        this.hasRunStarted = true;
         this.codeRunner.stop();
         this.raycaster?.clearVisuals();
         this.tilemapCollider?.reset();
@@ -456,19 +593,25 @@ export class Game extends Phaser.Scene {
         this.codeRunner.run(rawCode);
     }
 
-    private handleStopCode() {
+    private handleStopCode(skipTransition: boolean = false) {
+        const shouldAnimate =
+            !skipTransition &&
+            !this.isResetting &&
+            (this.hasRunStarted || this.isDying);
         this.cancelDeathSequence();
+        this.cancelResetTransition();
         this.isPaused = false;
         this.resumeAsSimulating = false;
         this.time.paused = false;
         this.codeRunner.stop();
         this.freezeSimulation();
-        this.raycaster?.clearVisuals();
-        this.tilemapCollider?.reset();
-        this.player.reset();
-        this.hud.reset();
-        this.cameras.main.centerOn(this.player.x, this.player.y);
         EventBus.emit('code-stopped');
+
+        if (shouldAnimate) {
+            this.playResetSlideTransition(() => this.resetSceneState());
+        } else {
+            this.resetSceneState();
+        }
     }
 
     private handlePauseCode() {
@@ -478,25 +621,30 @@ export class Game extends Phaser.Scene {
         this.physics.pause();
         this.time.paused = true;
         this.deathTween?.pause();
+        this.resetTween?.pause();
         this.cameras.main.stopFollow();
     }
 
     private handleResumeCode() {
         this.isPaused = false;
         this.time.paused = false;
-            if (this.isDying) {
-                this.deathTween?.resume();
-            } else if (this.resumeAsSimulating) {
-                this.isSimulating = true;
-                this.physics.resume();
-                this.followPlayerCamera();
-            } else {
-                this.freezeSimulation();
-            }
+        if (this.isDying) {
+            this.deathTween?.resume();
+        } else if (this.isResetting) {
+            this.resetTween?.resume();
+        } else if (this.resumeAsSimulating) {
+            this.isSimulating = true;
+            this.physics.resume();
+            this.followPlayerCamera();
+        } else {
+            this.freezeSimulation();
         }
+    }
 
     private handleLoadLevel(levelId: number) {
         this.cancelDeathSequence();
+        this.cancelResetTransition();
+        this.hasRunStarted = false;
         this.isPaused = false;
         this.resumeAsSimulating = false;
         this.time.paused = false;
