@@ -3,7 +3,9 @@ import level2Data from './Level-2.json';
 
 /**
  * Collision shape of a single tile within a 32x32 tileset.
- * - 'solid': Full 32x32 blocking tile.
+ * Any tile not listed in `tileShapes` defaults to `'solid'`.
+ * - 'solid': Full 32x32 blocking tile (default).
+ * - 'none': Non-colliding pass-through tile.
  * - 'ramp-left': 45-degree floor slope facing left (rises from bottom-left to top-right).
  * - 'ramp-right': 45-degree floor slope facing right (falls from top-left to bottom-right).
  * - 'ceiling-ramp-left': 45-degree upside-down ceiling corner facing left (solid top-right, '\' underside).
@@ -12,6 +14,7 @@ import level2Data from './Level-2.json';
  */
 export type TileShape =
     | 'solid'
+    | 'none'
     | 'ramp-left'
     | 'ramp-right'
     | 'ceiling-ramp-left'
@@ -29,7 +32,7 @@ export interface TilesetConfig {
     tileHeight: number;
     margin?: number;
     spacing?: number;
-    /** Maps 0-based local tile index inside the tileset grid to its collision shape. */
+    /** Overrides for non-solid tiles (0-based local tile index -> shape). Unlisted tiles default to 'solid'. */
     tileShapes: Record<number, TileShape>;
 }
 
@@ -134,8 +137,6 @@ export const TILESETS: Record<string, TilesetConfig> = {
         margin: 0,
         spacing: 0,
         tileShapes: {
-            0: 'solid',
-            1: 'solid',
             2: 'ramp-left',
             3: 'ramp-right',
         },
@@ -149,30 +150,10 @@ export const TILESETS: Record<string, TilesetConfig> = {
         margin: 0,
         spacing: 0,
         tileShapes: {
-            0: 'solid',
-            1: 'solid',
-            2: 'solid',
-            3: 'solid',
-            4: 'solid',
-            5: 'solid',
-            6: 'solid',
-            7: 'solid',
-            8: 'solid',
-            9: 'solid',
-            10: 'solid',
-            11: 'solid',
-            12: 'solid',
-            13: 'solid',
-            14: 'solid',
             21: 'ramp-right',
             22: 'ramp-left',
-            17: 'solid',
-            18: 'solid',
-            19: 'solid',
-            20: 'solid',
             30: 'ceiling-ramp-left',
             31: 'ceiling-ramp-right',
-            23: 'solid',
             36: 'danger',
         },
     },
