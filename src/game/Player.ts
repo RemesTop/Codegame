@@ -133,6 +133,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
      */
     public reset(): void {
         this.movementState = 'STOP';
+        if (typeof this.setAlpha === 'function') {
+            this.setAlpha(1);
+        } else {
+            this.alpha = 1;
+        }
         const body = this.body as Phaser.Physics.Arcade.Body | null;
         if (body) {
             body.reset(this.spawnX, this.spawnY);

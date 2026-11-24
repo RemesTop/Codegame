@@ -63,10 +63,10 @@ declare function jump(): void;
  * Negative angles wrap clockwise (e.g. -10 becomes 350) and values >= 360 wrap around.
  *
  * @param angle Direction in degrees (default: 0, straight right).
- * @param type Target type to detect: 'any', 'ground', or 'goal' (default: 'any').
+ * @param type Target type to detect: 'any', 'ground', 'goal', or 'danger' (default: 'any').
  * @returns Distance in units (1 tile = 10) to the hit target, or undefined if not found or blocked by another type.
  */
-declare function detect(angle?: number, type?: 'any' | 'ground' | 'goal' | string): number | undefined;
+declare function detect(angle?: number, type?: 'any' | 'ground' | 'goal' | 'danger' | string): number | undefined;
 
 /**
  * Shoots a raycast from the character at the given angle and returns true if a matching
@@ -74,11 +74,11 @@ declare function detect(angle?: number, type?: 'any' | 'ground' | 'goal' | strin
  * Draws the fading white ray only when true.
  *
  * @param angle Direction in degrees (0 = right, 90 = up, 180 = left, 270 = down).
- * @param type Target type to detect: 'any', 'ground', or 'goal'.
+ * @param type Target type to detect: 'any', 'ground', 'goal', or 'danger'.
  * @param maxDistance Maximum distance in units (1 tile = 10) to check.
  * @returns true if a matching target is within maxDistance, otherwise false.
  */
-declare function detect(angle: number, type: 'any' | 'ground' | 'goal' | string, maxDistance: number): boolean;
+declare function detect(angle: number, type: 'any' | 'ground' | 'goal' | 'danger' | string, maxDistance: number): boolean;
 
 /**
  * Displays and tracks a variable in the top-right corner of the game view.

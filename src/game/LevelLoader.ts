@@ -24,6 +24,7 @@ export interface LoadedLevel {
     rampRightGids: Set<number>;
     ceilingRampLeftGids: Set<number>;
     ceilingRampRightGids: Set<number>;
+    dangerGids: Set<number>;
     spawn: { x: number; y: number };
     goal: GoalRegion | null;
     destroy: () => void;
@@ -153,6 +154,7 @@ export class LevelLoader {
         const rampRightGids = new Set<number>();
         const ceilingRampLeftGids = new Set<number>();
         const ceilingRampRightGids = new Set<number>();
+        const dangerGids = new Set<number>();
 
         for (const mapTileset of map.tilesets) {
             const config = TILESETS[mapTileset.name];
@@ -174,81 +176,85 @@ export class LevelLoader {
             }
             phaserTilesets.push(added);
 
-            // Convert 0-based local tile indices into Tiled GIDs for this tileset
-            for (const [localIndexStr, shape] of Object.entries(config.tileShapes)) {
-                const gid = added.firstgid + Number(localIndexStr);
-                if (shape === 'solid') {
-                    solidGids.push(gid);
-                } else if (shape === 'ramp-left') {
-                    rampLeftGids.add(gid);
-                } else if (shape === 'ramp-right') {
-                    rampRightGids.add(gid);
-                } else if (shape === 'ceiling-ramp-left') {
-                    ceilingRampLeftGids.add(gid);
-                } else if (shape === 'ceiling-ramp-right') {
-                    ceilingRampRightGids.add(gid);
+                // Every tile defaults to 'solid' unless overridden in config.tileShapes
+                for (let localIndex = 0; localIndex < added.total; localIndex++) {
+                    const gid = added.firstgid + localIndex;
+                    const shape = config.tileShapes[localIndex] ?? 'solid';
+                    if (shape === 'solid') {
+                        solidGids.push(gid);
+                    } else if (shape === 'ramp-left') {
+                        rampLeftGids.add(gid);
+                    } else if (shape === 'ramp-right') {
+                        rampRightGids.add(gid);
+                    } else if (shape === 'ceiling-ramp-left') {
+                        ceilingRampLeftGids.add(gid);
+                    } else if (shape === 'ceiling-ramp-right') {
+                        ceilingRampRightGids.add(gid);
+                    } else if (shape === 'danger') {
+                        dangerGids.add(gid);
+                    }
                 }
             }
+
+            const layerMeta = collectTileLayerMeta(definition.mapData.layers);
+            const layers: Phaser.Tilemaps.TilemapLayer[] = [];
+            const collidingLayers: Phaser.Tilemaps.TilemapLayer[] = [];
+
+            for (const meta of layerMeta) {
+                const layer = map.createLayer(meta.fullName, phaserTilesets, 0, 0, false);
+                if (!(layer instanceof Phaser.Tilemaps.TilemapLayer)) {
+                    continue;
+                }
+                layers.push(layer);
+
+                if (meta.collides) {
+                    // Only full solid tiles are marked colliding in Phaser's face calculator;
+                    // 45-degree ramps are handled separately so adjacent solids keep their top/side faces.
+                    if (solidGids.length > 0) {
+                        layer.setCollision(solidGids);
+                    }
+                    collidingLayers.push(layer);
+                }
+            }
+
+            // Configure physics bounds to match level dimensions while keeping bottom open
+            scene.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+            scene.physics.world.setBoundsCollision(true, true, true, false);
+
+            // Center maps smaller than the viewport, or allow full scrolling on larger maps
+            const viewWidth = scene.scale.width;
+            const viewHeight = scene.scale.height;
+            const boundsX = map.widthInPixels < viewWidth ? -(viewWidth - map.widthInPixels) / 2 : 0;
+            const boundsY = map.heightInPixels < viewHeight ? -(viewHeight - map.heightInPixels) / 2 : 0;
+            scene.cameras.main.setBounds(
+                boundsX,
+                boundsY,
+                Math.max(map.widthInPixels, viewWidth),
+                Math.max(map.heightInPixels, viewHeight)
+            );
+
+            const spawn = findSpawnFromObjects(map, definition.spawn);
+            const goal = findGoalFromObjects(map);
+
+            return {
+                definition,
+                map,
+                layers,
+                collidingLayers,
+                solidGids,
+                rampLeftGids,
+                rampRightGids,
+                ceilingRampLeftGids,
+                ceilingRampRightGids,
+                dangerGids,
+                spawn,
+                goal,
+                destroy: () => {
+                    for (const layer of layers) {
+                        layer.destroy();
+                    }
+                    map.destroy();
+                },
+            };
         }
-
-        const layerMeta = collectTileLayerMeta(definition.mapData.layers);
-        const layers: Phaser.Tilemaps.TilemapLayer[] = [];
-        const collidingLayers: Phaser.Tilemaps.TilemapLayer[] = [];
-
-        for (const meta of layerMeta) {
-            const layer = map.createLayer(meta.fullName, phaserTilesets, 0, 0, false);
-            if (!(layer instanceof Phaser.Tilemaps.TilemapLayer)) {
-                continue;
-            }
-            layers.push(layer);
-
-            if (meta.collides) {
-                // Only full solid tiles are marked colliding in Phaser's face calculator;
-                // 45-degree ramps are handled separately so adjacent solids keep their top/side faces.
-                if (solidGids.length > 0) {
-                    layer.setCollision(solidGids);
-                }
-                collidingLayers.push(layer);
-            }
-        }
-
-        // Configure physics bounds to match level dimensions while keeping bottom open
-        scene.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
-        scene.physics.world.setBoundsCollision(true, true, true, false);
-
-        // Center maps smaller than the viewport, or allow full scrolling on larger maps
-        const viewWidth = scene.scale.width;
-        const viewHeight = scene.scale.height;
-        const boundsX = map.widthInPixels < viewWidth ? -(viewWidth - map.widthInPixels) / 2 : 0;
-        const boundsY = map.heightInPixels < viewHeight ? -(viewHeight - map.heightInPixels) / 2 : 0;
-        scene.cameras.main.setBounds(
-            boundsX,
-            boundsY,
-            Math.max(map.widthInPixels, viewWidth),
-            Math.max(map.heightInPixels, viewHeight)
-        );
-
-        const spawn = findSpawnFromObjects(map, definition.spawn);
-        const goal = findGoalFromObjects(map);
-
-        return {
-            definition,
-            map,
-            layers,
-            collidingLayers,
-            solidGids,
-            rampLeftGids,
-            rampRightGids,
-            ceilingRampLeftGids,
-            ceilingRampRightGids,
-            spawn,
-            goal,
-            destroy: () => {
-                for (const layer of layers) {
-                    layer.destroy();
-                }
-                map.destroy();
-            },
-        };
     }
-}
