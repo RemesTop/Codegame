@@ -20,10 +20,12 @@ interface MockTileSprite {
     tileScaleY: number;
     depth: number;
     scrollFactor: number;
+    alpha: number;
     frame: { height: number };
     setOrigin: ReturnType<typeof vi.fn>;
     setScrollFactor: ReturnType<typeof vi.fn>;
     setDepth: ReturnType<typeof vi.fn>;
+    setAlpha: ReturnType<typeof vi.fn>;
     setSize: ReturnType<typeof vi.fn>;
     setTileScale: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
@@ -69,6 +71,7 @@ function createMockScene(options: {
                         tileScaleY: 1,
                         depth: 0,
                         scrollFactor: 1,
+                        alpha: 1,
                         frame: { height: 768 },
                         setOrigin: vi.fn(),
                         setScrollFactor: vi.fn((sf: number) => {
@@ -77,6 +80,10 @@ function createMockScene(options: {
                         }),
                         setDepth: vi.fn((d: number) => {
                             sprite.depth = d;
+                            return sprite;
+                        }),
+                        setAlpha: vi.fn((a: number) => {
+                            sprite.alpha = a;
                             return sprite;
                         }),
                         setSize: vi.fn((w: number, h: number) => {

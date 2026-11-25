@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { LoadedLevel } from './LevelLoader';
 
-export type DetectTargetType = 'any' | 'ground' | 'goal' | 'danger' | string;
+export type DetectTargetType = 'any' | 'ground' | 'goal' | 'danger' | 'key' | 'door' | string;
 
 /** Number of player-facing coordinate and distance units per tile (1 tile = 10 units). */
 export const UNITS_PER_TILE = 10;

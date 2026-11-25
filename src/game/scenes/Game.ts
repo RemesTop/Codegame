@@ -9,12 +9,36 @@ import { TilemapCollider } from '../TilemapCollider';
 import { DetectObjectTarget, pixelsToUnits, Raycaster } from '../Raycaster';
 import { ParallaxBackground } from '../ParallaxBackground';
 
+interface KeycardEntity {
+    sprite: Phaser.GameObjects.Image;
+    baseY: number;
+    collected: boolean;
+}
+
+interface DoorEntity {
+    sprite: Phaser.Physics.Arcade.Image;
+    collider: Phaser.Physics.Arcade.Collider;
+    isOpen: boolean;
+}
+
+interface TeleportBeamBar {
+    rect: Phaser.GameObjects.Rectangle;
+    baseY: number;
+    riseHeight: number;
+    progress: number;
+}
+
 export class Game extends Phaser.Scene {
     private player!: Player;
     private currentLevelId: number = 1;
     private currentLevel: LoadedLevel | null = null;
     private tilemapCollider: TilemapCollider | null = null;
-    private goalMarker: Phaser.GameObjects.Rectangle | null = null;
+    private goalMarker: Phaser.GameObjects.Image | null = null;
+    private goalTeleportBars: TeleportBeamBar[] = [];
+    private keycardEntities: KeycardEntity[] = [];
+    private doorEntities: DoorEntity[] = [];
+    private readonly doorOpenRangeX: number = 80;
+    private readonly doorOpenRangeY: number = 64;
     private isSimulating: boolean = false;
     private isDying: boolean = false;
     private isResetting: boolean = false;
@@ -45,8 +69,12 @@ export class Game extends Phaser.Scene {
 
     preload() {
         this.load.setPath('assets');
-        this.load.image('bg-sky', 'bg_test_SKY.png');
-        this.load.image('bg-city', 'bg_test_CITY.png');
+        this.load.image('bg-sky', 'bg_blue_SKY.png');
+        this.load.image('bg-city', 'bg_blue_CITY.png');
+        this.load.image('keycard', 'keycard1.png');
+        this.load.image('door-closed', 'Locked-door-1.png');
+        this.load.image('door-open', 'Locked-door-2.png');
+        this.load.image('goal-teleport', 'teleport1.png');
         LevelLoader.preload(this);
     }
 
@@ -110,6 +138,8 @@ export class Game extends Phaser.Scene {
             this.raycaster?.destroy();
             this.tilemapCollider?.destroy();
             this.tilemapCollider = null;
+            this.destroyLevelInteractables();
+            this.destroyGoalTeleportEffect();
             this.goalMarker?.destroy();
             this.goalMarker = null;
             this.currentLevel?.destroy();
@@ -131,6 +161,8 @@ export class Game extends Phaser.Scene {
         this.raycaster?.clearVisuals();
         this.tilemapCollider?.destroy();
         this.tilemapCollider = null;
+        this.destroyLevelInteractables();
+        this.destroyGoalTeleportEffect();
         this.goalMarker?.destroy();
         this.goalMarker = null;
         this.currentLevel?.destroy();
@@ -139,16 +171,11 @@ export class Game extends Phaser.Scene {
         this.currentLevel = loaded;
 
         if (loaded.goal) {
-            this.goalMarker = this.add.rectangle(
-                loaded.goal.x,
-                loaded.goal.y,
-                loaded.goal.width,
-                loaded.goal.height,
-                0x22c55e,
-                0.85
-            );
-            this.goalMarker.setStrokeStyle(2, 0xffffff, 1);
-            this.goalMarker.setDepth(5);
+            this.goalMarker = this.add
+                .image(loaded.goal.x, loaded.goal.y, 'goal-teleport')
+                .setOrigin(0.5, 0.5)
+                .setDepth(5);
+            this.spawnGoalTeleportEffect(loaded.goal.x, loaded.goal.y);
         }
 
         if (!this.player) {
@@ -160,6 +187,7 @@ export class Game extends Phaser.Scene {
         }
 
         this.tilemapCollider = new TilemapCollider(this, this.player, loaded);
+        this.spawnLevelInteractables(loaded);
         this.cameras.main.centerOn(loaded.spawn.x, loaded.spawn.y);
 
         // Keep player and game logic frozen until Run is pressed
@@ -386,13 +414,189 @@ export class Game extends Phaser.Scene {
      * Phaser's internal render & physics loop running at ~60fps.
      * Frozen until Run is pressed; delegates player kinematics to Player.update().
      */
-    update(_time: number, delta: number) {
+    update(time: number, delta: number) {
         this.parallaxBg?.update();
+        this.animateWorldKeycards(time);
+        this.updateGoalTeleportEffect(delta);
         if (!this.isSimulating || !this.player) return;
         this.player.update(delta);
+        this.checkKeycardPickups();
+        this.updateDoors();
         if (this.checkDangerTouched()) return;
         if (this.checkFallenOffMap()) return;
         this.checkGoalReached();
+    }
+
+    /**
+     * Spawns thin wide opaque blue bars that rise continuously from the teleporter base.
+     */
+    private spawnGoalTeleportEffect(goalX: number, goalY: number): void {
+        this.destroyGoalTeleportEffect();
+        if (!this.add?.rectangle) return;
+
+        const barCount = 4;
+        const barWidth = 24;
+        const barHeight = 3;
+        const baseY = goalY + 11;
+        const riseHeight = 36;
+
+        for (let i = 0; i < barCount; i++) {
+            const progress = i / barCount;
+            const rect = this.add
+                .rectangle(
+                    Math.round(goalX),
+                    Math.round(baseY - progress * riseHeight),
+                    barWidth,
+                    barHeight,
+                    0x38bdf8,
+                    1
+                )
+                .setOrigin(0.5, 0.5)
+                .setDepth(6);
+
+            this.goalTeleportBars.push({
+                rect,
+                baseY,
+                riseHeight,
+                progress,
+            });
+        }
+    }
+
+    private updateGoalTeleportEffect(delta: number): void {
+        if (this.goalTeleportBars.length === 0 || this.isPaused) return;
+
+        const cycleMs = 1400;
+        const step = delta / cycleMs;
+
+        for (const bar of this.goalTeleportBars) {
+            bar.progress = (bar.progress + step) % 1;
+            bar.rect.setY(Math.round(bar.baseY - bar.progress * bar.riseHeight));
+            bar.rect.setAlpha(
+                bar.progress > 0.8 ? (1 - bar.progress) / 0.2 : 1
+            );
+        }
+    }
+
+    private destroyGoalTeleportEffect(): void {
+        for (const bar of this.goalTeleportBars) {
+            bar.rect.destroy();
+        }
+        this.goalTeleportBars = [];
+    }
+
+    private spawnLevelInteractables(loaded: LoadedLevel): void {
+        for (const kc of loaded.keycards) {
+            const sprite = this.add
+                .image(kc.x, kc.y, 'keycard')
+                .setOrigin(0.5, 0.5)
+                .setDepth(6);
+            this.keycardEntities.push({
+                sprite,
+                baseY: kc.y,
+                collected: false,
+            });
+        }
+
+        for (const door of loaded.doors) {
+            const sprite = this.physics.add
+                .staticImage(door.x, door.y, 'door-closed')
+                .setOrigin(0.5, 0.5)
+                .setDepth(4);
+            sprite.refreshBody();
+
+            const entity: DoorEntity = {
+                sprite,
+                collider: null as unknown as Phaser.Physics.Arcade.Collider,
+                isOpen: false,
+            };
+
+            // Block while the door is closed; once unlocked with a keycard it stays open
+            entity.collider = this.physics.add.collider(
+                this.player,
+                sprite,
+                undefined,
+                () => !entity.isOpen,
+                this
+            );
+
+            this.doorEntities.push(entity);
+        }
+    }
+
+    private destroyLevelInteractables(): void {
+        for (const kc of this.keycardEntities) {
+            kc.sprite.destroy();
+        }
+        this.keycardEntities = [];
+
+        for (const door of this.doorEntities) {
+            door.collider.destroy();
+            door.sprite.destroy();
+        }
+        this.doorEntities = [];
+    }
+
+    private resetLevelInteractables(): void {
+        for (const kc of this.keycardEntities) {
+            kc.collected = false;
+            kc.sprite.setVisible(true);
+            kc.sprite.setY(kc.baseY);
+        }
+
+        for (const door of this.doorEntities) {
+            door.isOpen = false;
+            door.sprite.setTexture('door-closed');
+            const body = door.sprite.body as Phaser.Physics.Arcade.StaticBody | null;
+            if (body) {
+                body.enable = true;
+            }
+        }
+    }
+
+    private animateWorldKeycards(time: number): void {
+        for (const kc of this.keycardEntities) {
+            if (kc.collected) continue;
+            kc.sprite.setY(kc.baseY + Math.sin(time / 350) * 3);
+        }
+    }
+
+    private checkKeycardPickups(): void {
+        if (!this.player || this.keycardEntities.length === 0) return;
+
+        const playerBounds = this.player.getBounds();
+        for (const kc of this.keycardEntities) {
+            if (kc.collected) continue;
+            const keyBounds = kc.sprite.getBounds();
+            if (Phaser.Geom.Intersects.RectangleToRectangle(playerBounds, keyBounds)) {
+                kc.collected = true;
+                kc.sprite.setVisible(false);
+                this.player.setHasKeycard(true);
+            }
+        }
+    }
+
+    private updateDoors(): void {
+        if (!this.player || !this.player.hasKeycard || this.doorEntities.length === 0) {
+            return;
+        }
+
+        for (const door of this.doorEntities) {
+            if (door.isOpen) continue;
+
+            const dx = Math.abs(this.player.x - door.sprite.x);
+            const dy = Math.abs(this.player.y - door.sprite.y);
+            if (dx <= this.doorOpenRangeX && dy <= this.doorOpenRangeY) {
+                door.isOpen = true;
+                door.sprite.setTexture('door-open');
+                const body = door.sprite.body as Phaser.Physics.Arcade.StaticBody | null;
+                if (body) {
+                    body.enable = false;
+                }
+                this.player.setHasKeycard(false);
+                break;
+            }
+        }
     }
 
     private detect(
@@ -409,6 +613,30 @@ export class Game extends Phaser.Scene {
             const bounds = this.goalMarker.getBounds();
             objects.push({
                 type: 'goal',
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+            });
+        }
+
+        for (const kc of this.keycardEntities) {
+            if (kc.collected) continue;
+            const bounds = kc.sprite.getBounds();
+            objects.push({
+                type: 'key',
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+            });
+        }
+
+        for (const door of this.doorEntities) {
+            if (door.isOpen) continue;
+            const bounds = door.sprite.getBounds();
+            objects.push({
+                type: 'door',
                 x: bounds.x,
                 y: bounds.y,
                 width: bounds.width,
@@ -551,6 +779,9 @@ export class Game extends Phaser.Scene {
                 alpha: 0,
                 duration: this.deathFadeDurationMs,
                 ease: 'Linear',
+                onUpdate: () => {
+                    this.player.syncHeldKeycardAlpha?.();
+                },
                 onComplete: () => {
                     if (!this.isDying) return;
                     this.deathTween = null;
@@ -685,6 +916,7 @@ export class Game extends Phaser.Scene {
         this.hasRunStarted = false;
         this.raycaster?.clearVisuals();
         this.tilemapCollider?.reset();
+        this.resetLevelInteractables();
         this.player.reset();
         this.hud.reset();
         this.cameras.main.centerOn(this.player.x, this.player.y);
@@ -729,6 +961,7 @@ export class Game extends Phaser.Scene {
         this.codeRunner.stop();
         this.raycaster?.clearVisuals();
         this.tilemapCollider?.reset();
+        this.resetLevelInteractables();
         this.player.reset();
         this.hud.reset();
         this.resumeSimulation();

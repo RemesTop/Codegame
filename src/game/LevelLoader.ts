@@ -14,6 +14,20 @@ export interface GoalRegion {
     height: number;
 }
 
+export interface KeycardSpawn {
+    /** Center X of the 32x32 keycard (from Tiled Point object). */
+    x: number;
+    /** Center Y of the 32x32 keycard (from Tiled Point object). */
+    y: number;
+}
+
+export interface DoorSpawn {
+    /** Center X of the 32x64 door (from Tiled Point at center of bottom tile). */
+    x: number;
+    /** Center Y of the 32x64 door (bottom-tile center Y minus 16px). */
+    y: number;
+}
+
 export interface LoadedLevel {
     definition: LevelDefinition;
     map: Phaser.Tilemaps.Tilemap;
@@ -27,6 +41,8 @@ export interface LoadedLevel {
     dangerGids: Set<number>;
     spawn: { x: number; y: number };
     goal: GoalRegion | null;
+    keycards: KeycardSpawn[];
+    doors: DoorSpawn[];
     destroy: () => void;
 }
 
@@ -112,6 +128,49 @@ function findGoalFromObjects(map: Phaser.Tilemaps.Tilemap): GoalRegion | null {
         }
     }
     return null;
+}
+
+/**
+ * Extracts key Point objects (name or type 'key').
+ * Point position is the center of the 32x32 keycard.
+ */
+export function findKeycardsFromObjects(map: Phaser.Tilemaps.Tilemap): KeycardSpawn[] {
+    const keycards: KeycardSpawn[] = [];
+    for (const objectLayer of map.objects) {
+        for (const obj of objectLayer.objects) {
+            if (obj.point !== true) continue;
+            const objName = (obj.name ?? '').toLowerCase();
+            const objType = (obj.type ?? '').toLowerCase();
+            if (objName === 'key' || objType === 'key') {
+                if (typeof obj.x === 'number' && typeof obj.y === 'number') {
+                    keycards.push({ x: obj.x, y: obj.y });
+                }
+            }
+        }
+    }
+    return keycards;
+}
+
+/**
+ * Extracts locked door Point objects (name or type 'door').
+ * Point position is the center of the bottom tile of the 32x64 (2-tile tall) door,
+ * so the door's sprite center is shifted up by 16px.
+ */
+export function findDoorsFromObjects(map: Phaser.Tilemaps.Tilemap): DoorSpawn[] {
+    const doors: DoorSpawn[] = [];
+    for (const objectLayer of map.objects) {
+        for (const obj of objectLayer.objects) {
+            if (obj.point !== true) continue;
+            const objName = (obj.name ?? '').toLowerCase();
+            const objType = (obj.type ?? '').toLowerCase();
+            if (objName === 'door' || objType === 'door') {
+                if (typeof obj.x === 'number' && typeof obj.y === 'number') {
+                    doors.push({ x: obj.x, y: obj.y - 16 });
+                }
+            }
+        }
+    }
+    return doors;
 }
 
 /**
@@ -235,6 +294,8 @@ export class LevelLoader {
 
             const spawn = findSpawnFromObjects(map, definition.spawn);
             const goal = findGoalFromObjects(map);
+            const keycards = findKeycardsFromObjects(map);
+            const doors = findDoorsFromObjects(map);
 
             return {
                 definition,
@@ -249,6 +310,8 @@ export class LevelLoader {
                 dangerGids,
                 spawn,
                 goal,
+                keycards,
+                doors,
                 destroy: () => {
                     for (const layer of layers) {
                         layer.destroy();

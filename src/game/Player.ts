@@ -38,6 +38,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     private readonly sleepParticleLifetimeMs: number = 900;
     private sleepParticles: SleepParticle[] = [];
 
+    // Held keycard state (shown to the right of the player)
+    public hasKeycard: boolean = false;
+    private heldKeycardSprite: Phaser.GameObjects.Image | null = null;
+    private postUpdateBound: boolean = false;
+
     constructor(scene: Phaser.Scene, x: number, y: number, texture: string = 'dude') {
         // If the requested texture is not in cache, create a clean default sprite texture
         if (!scene.textures.exists(texture)) {
@@ -99,6 +104,51 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
         this.setVelocityX(currentVx);
         this.updateSleepParticles(delta);
+        this.updateHeldKeycard();
+    }
+
+    public setHasKeycard(hasKeycard: boolean): void {
+        this.hasKeycard = hasKeycard;
+        if (hasKeycard) {
+            if (!this.heldKeycardSprite && this.scene?.add?.image) {
+                this.heldKeycardSprite = this.scene.add
+                    .image(Math.round(this.x), Math.round(this.y), 'keycard')
+                    .setOrigin(0.5, 0.5)
+                    .setDepth((this.depth ?? 10) + 1);
+            }
+            if (!this.postUpdateBound && this.scene?.events?.on) {
+                this.scene.events.on(
+                    Phaser.Scenes.Events.POST_UPDATE,
+                    this.updateHeldKeycard,
+                    this
+                );
+                this.postUpdateBound = true;
+            }
+            if (this.heldKeycardSprite) {
+                this.heldKeycardSprite.setVisible(true);
+                this.updateHeldKeycard();
+            }
+        } else if (this.heldKeycardSprite) {
+            this.heldKeycardSprite.setVisible(false);
+        }
+    }
+
+    public syncHeldKeycardAlpha(): void {
+        if (this.heldKeycardSprite && this.hasKeycard) {
+            this.heldKeycardSprite.setAlpha(this.alpha);
+        }
+    }
+
+    private updateHeldKeycard(): void {
+        if (!this.hasKeycard || !this.heldKeycardSprite) return;
+
+        const halfWidth = (this.displayWidth || this.width || 32) / 2;
+        const offsetX = halfWidth + 18;
+        this.heldKeycardSprite.setPosition(
+            Math.round(this.x + offsetX),
+            Math.round(this.y - 4)
+        );
+        this.heldKeycardSprite.setAlpha(this.alpha);
     }
 
     public setSleeping(sleeping: boolean): void {
@@ -221,6 +271,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.isSleeping = false;
         this.sleepParticleCooldownMs = 0;
         this.clearSleepParticles();
+        this.setHasKeycard(false);
         if (typeof this.setAlpha === 'function') {
             this.setAlpha(1);
         } else {
@@ -237,6 +288,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     public override destroy(fromScene?: boolean): void {
         this.clearSleepParticles();
+        if (this.postUpdateBound && this.scene?.events?.off) {
+            this.scene.events.off(
+                Phaser.Scenes.Events.POST_UPDATE,
+                this.updateHeldKeycard,
+                this
+            );
+            this.postUpdateBound = false;
+        }
+        this.heldKeycardSprite?.destroy();
+        this.heldKeycardSprite = null;
         super.destroy(fromScene);
     }
 }
