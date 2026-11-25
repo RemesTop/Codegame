@@ -7,6 +7,7 @@ import { LevelLoader, LoadedLevel } from '../LevelLoader';
 import { getLevelIdFromUrl } from '../Levels/levels';
 import { TilemapCollider } from '../TilemapCollider';
 import { DetectObjectTarget, pixelsToUnits, Raycaster } from '../Raycaster';
+import { ParallaxBackground } from '../ParallaxBackground';
 
 export class Game extends Phaser.Scene {
     private player!: Player;
@@ -36,6 +37,7 @@ export class Game extends Phaser.Scene {
     private hud!: GameHUD;
     private codeRunner!: CodeRunner;
     private raycaster!: Raycaster;
+    private parallaxBg: ParallaxBackground | null = null;
 
     constructor() {
         super('Game');
@@ -43,18 +45,14 @@ export class Game extends Phaser.Scene {
 
     preload() {
         this.load.setPath('assets');
-        this.load.image('background', 'bg.png');
+        this.load.image('bg-sky', 'bg_test_SKY.png');
+        this.load.image('bg-city', 'bg_test_CITY.png');
         LevelLoader.preload(this);
     }
 
     create() {
-        // Keep the background pinned and sized to the viewport when the camera follows the player
-        const viewWidth = this.scale?.width || 1024;
-        const viewHeight = this.scale?.height || 832;
-        this.add
-            .image(viewWidth / 2, viewHeight / 2, 'background')
-            .setDisplaySize(viewWidth, viewHeight)
-            .setScrollFactor(0);
+        // 2-layer parallax background (far starry sky underneath, city skyline on top)
+        this.parallaxBg = new ParallaxBackground(this);
 
         // Load initial level from URL query param (?level=...)
         this.currentLevelId = getLevelIdFromUrl();
@@ -107,6 +105,8 @@ export class Game extends Phaser.Scene {
             EventBus.off('load-level', this.handleLoadLevel, this);
             EventBus.off('code-error', this.freezeSimulation, this);
             this.handleStopCode(true);
+            this.parallaxBg?.destroy();
+            this.parallaxBg = null;
             this.raycaster?.destroy();
             this.tilemapCollider?.destroy();
             this.tilemapCollider = null;
@@ -167,6 +167,9 @@ export class Game extends Phaser.Scene {
 
         // Play a one-time overview camera pan across the level
         this.playLevelIntroPan(loaded.spawn);
+
+        // Sync parallax background bounds and initial scroll position with the loaded level
+        this.parallaxBg?.configureForCamera();
     }
 
     /**
@@ -376,6 +379,7 @@ export class Game extends Phaser.Scene {
         cam.centerOn(this.player.x, this.player.y);
         cam.startFollow(this.player, true, 0.12, 0.06);
         cam.setDeadzone(180, 180);
+        this.parallaxBg?.update();
     }
 
     /**
@@ -383,6 +387,7 @@ export class Game extends Phaser.Scene {
      * Frozen until Run is pressed; delegates player kinematics to Player.update().
      */
     update(_time: number, delta: number) {
+        this.parallaxBg?.update();
         if (!this.isSimulating || !this.player) return;
         this.player.update(delta);
         if (this.checkDangerTouched()) return;
@@ -683,6 +688,7 @@ export class Game extends Phaser.Scene {
         this.player.reset();
         this.hud.reset();
         this.cameras.main.centerOn(this.player.x, this.player.y);
+        this.parallaxBg?.update();
     }
 
     private checkGoalReached(): void {
