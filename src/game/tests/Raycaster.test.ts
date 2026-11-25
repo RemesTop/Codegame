@@ -71,6 +71,8 @@ function createMockLevel(
         dangerGids: new Set(options?.dangerGids ?? [6]),
         spawn: { x: 0, y: 0 },
         goal: null,
+        keycards: [],
+        doors: [],
         destroy: vi.fn(),
     };
 }
