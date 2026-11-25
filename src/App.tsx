@@ -316,6 +316,7 @@ function App() {
             >
                 {/* Left side: Phaser Game Viewport */}
                 <div className="game-view">
+                    <div className="game-header" />
                     <div className="game-stage">
                         <PhaserGame ref={phaserRef} />
                         {isLevelComplete && (

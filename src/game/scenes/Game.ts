@@ -7,6 +7,7 @@ import { LevelLoader, LoadedLevel } from '../LevelLoader';
 import { getLevelIdFromUrl } from '../Levels/levels';
 import { TilemapCollider } from '../TilemapCollider';
 import { DetectObjectTarget, pixelsToUnits, Raycaster } from '../Raycaster';
+import { ParallaxBackground } from '../ParallaxBackground';
 
 export class Game extends Phaser.Scene {
     private player!: Player;
@@ -20,9 +21,15 @@ export class Game extends Phaser.Scene {
     private hasRunStarted: boolean = false;
     private deathTween: Phaser.Tweens.Tween | null = null;
     private resetTween: Phaser.Tweens.Tween | null = null;
+    private introPanTween: Phaser.Tweens.Tween | null = null;
     private resetOverlay: Phaser.GameObjects.Image | null = null;
     private readonly deathFadeDurationMs: number = 900;
     private readonly resetSlideHalfDurationMs: number = 350;
+    private readonly introPanSpeedPxPerSec: number = 180;
+    private readonly introPanMinDurationMs: number = 1400;
+    private readonly introPanMaxDurationMs: number = 4500;
+    private readonly introPanDelayMs: number = 200;
+    private readonly fallDeathMarginPx: number = 320;
     private isPaused: boolean = false;
     private resumeAsSimulating: boolean = false;
 
@@ -30,6 +37,7 @@ export class Game extends Phaser.Scene {
     private hud!: GameHUD;
     private codeRunner!: CodeRunner;
     private raycaster!: Raycaster;
+    private parallaxBg: ParallaxBackground | null = null;
 
     constructor() {
         super('Game');
@@ -37,13 +45,14 @@ export class Game extends Phaser.Scene {
 
     preload() {
         this.load.setPath('assets');
-        this.load.image('background', 'bg.png');
+        this.load.image('bg-sky', 'bg_test_SKY.png');
+        this.load.image('bg-city', 'bg_test_CITY.png');
         LevelLoader.preload(this);
     }
 
     create() {
-        // Keep the background pinned to the viewport when the camera follows the player
-        this.add.image(512, 384, 'background').setScrollFactor(0);
+        // 2-layer parallax background (far starry sky underneath, city skyline on top)
+        this.parallaxBg = new ParallaxBackground(this);
 
         // Load initial level from URL query param (?level=...)
         this.currentLevelId = getLevelIdFromUrl();
@@ -65,9 +74,12 @@ export class Game extends Phaser.Scene {
                 this.hud.registerTrack(label, valueOrGetter),
         };
 
-        // Initialize CodeRunner with scene, API, and post-tick HUD refresh callback
-        this.codeRunner = new CodeRunner(this, api, () =>
-            this.hud.evaluateTrackedVariables()
+        // Initialize CodeRunner with scene, API, post-tick HUD refresh, and sleep particle state callback
+        this.codeRunner = new CodeRunner(
+            this,
+            api,
+            () => this.hud.evaluateTrackedVariables(),
+            (isSleeping: boolean) => this.player?.setSleeping(isSleeping)
         );
 
         // --- Preview Camera Panning / Scrolling (active while frozen before Run) ---
@@ -93,6 +105,8 @@ export class Game extends Phaser.Scene {
             EventBus.off('load-level', this.handleLoadLevel, this);
             EventBus.off('code-error', this.freezeSimulation, this);
             this.handleStopCode(true);
+            this.parallaxBg?.destroy();
+            this.parallaxBg = null;
             this.raycaster?.destroy();
             this.tilemapCollider?.destroy();
             this.tilemapCollider = null;
@@ -111,6 +125,7 @@ export class Game extends Phaser.Scene {
     public loadLevel(levelId: number): void {
         this.cancelDeathSequence();
         this.cancelResetTransition();
+        this.cancelIntroPan();
         this.hasRunStarted = false;
         this.currentLevelId = levelId;
         this.raycaster?.clearVisuals();
@@ -149,6 +164,95 @@ export class Game extends Phaser.Scene {
 
         // Keep player and game logic frozen until Run is pressed
         this.freezeSimulation();
+
+        // Play a one-time overview camera pan across the level
+        this.playLevelIntroPan(loaded.spawn);
+
+        // Sync parallax background bounds and initial scroll position with the loaded level
+        this.parallaxBg?.configureForCamera();
+    }
+
+    /**
+     * Plays a one-time smooth camera pan when a level loads:
+     * - Horizontal levels: scrolls smoothly from right to left.
+     * - Vertical levels: scrolls smoothly from top to bottom.
+     * Automatically cancels if the user scrolls/drags, runs code, or switches levels.
+     */
+    private playLevelIntroPan(spawn: { x: number; y: number }): void {
+        this.cancelIntroPan();
+
+        const cam = this.cameras?.main;
+        if (!cam || typeof cam.getBounds !== 'function' || !this.tweens?.add) {
+            return;
+        }
+
+        const bounds = cam.getBounds();
+        const minScrollX = bounds.x;
+        const maxScrollX = Math.max(bounds.x, bounds.right - cam.width);
+        const minScrollY = bounds.y;
+        const maxScrollY = Math.max(bounds.y, bounds.bottom - cam.height);
+
+        const scrollRangeX = maxScrollX - minScrollX;
+        const scrollRangeY = maxScrollY - minScrollY;
+
+        if (scrollRangeX <= 0 && scrollRangeY <= 0) {
+            return;
+        }
+
+        const isHorizontal = scrollRangeX > 0 && scrollRangeX >= scrollRangeY;
+        const distance = isHorizontal ? scrollRangeX : scrollRangeY;
+        const duration = Phaser.Math.Clamp(
+            Math.round((distance / this.introPanSpeedPxPerSec) * 1000),
+            this.introPanMinDurationMs,
+            this.introPanMaxDurationMs
+        );
+
+        if (isHorizontal) {
+            const targetY = Phaser.Math.Clamp(
+                spawn.y - cam.height / 2,
+                minScrollY,
+                maxScrollY
+            );
+            cam.scrollX = maxScrollX;
+            cam.scrollY = targetY;
+
+            this.introPanTween = this.tweens.add({
+                targets: cam,
+                scrollX: minScrollX,
+                duration,
+                delay: this.introPanDelayMs,
+                ease: 'Sine.easeInOut',
+                onComplete: () => {
+                    this.introPanTween = null;
+                },
+            });
+        } else {
+            const targetX = Phaser.Math.Clamp(
+                spawn.x - cam.width / 2,
+                minScrollX,
+                maxScrollX
+            );
+            cam.scrollX = targetX;
+            cam.scrollY = minScrollY;
+
+            this.introPanTween = this.tweens.add({
+                targets: cam,
+                scrollY: maxScrollY,
+                duration,
+                delay: this.introPanDelayMs,
+                ease: 'Sine.easeInOut',
+                onComplete: () => {
+                    this.introPanTween = null;
+                },
+            });
+        }
+    }
+
+    private cancelIntroPan(): void {
+        if (this.introPanTween) {
+            this.introPanTween.stop();
+            this.introPanTween = null;
+        }
     }
 
     /**
@@ -169,6 +273,7 @@ export class Game extends Phaser.Scene {
                 deltaY: number
             ) => {
                 if (this.isSimulating || this.isDying || this.isResetting) return;
+                this.cancelIntroPan();
 
                 const cam = this.cameras.main;
                 const bounds = cam.getBounds();
@@ -190,6 +295,7 @@ export class Game extends Phaser.Scene {
 
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (this.isSimulating || this.isDying || this.isResetting) return;
+            this.cancelIntroPan();
             isDragging = true;
             lastPointerX = pointer.x;
             lastPointerY = pointer.y;
@@ -273,6 +379,7 @@ export class Game extends Phaser.Scene {
         cam.centerOn(this.player.x, this.player.y);
         cam.startFollow(this.player, true, 0.12, 0.06);
         cam.setDeadzone(180, 180);
+        this.parallaxBg?.update();
     }
 
     /**
@@ -280,9 +387,11 @@ export class Game extends Phaser.Scene {
      * Frozen until Run is pressed; delegates player kinematics to Player.update().
      */
     update(_time: number, delta: number) {
+        this.parallaxBg?.update();
         if (!this.isSimulating || !this.player) return;
         this.player.update(delta);
         if (this.checkDangerTouched()) return;
+        if (this.checkFallenOffMap()) return;
         this.checkGoalReached();
     }
 
@@ -390,10 +499,41 @@ export class Game extends Phaser.Scene {
     }
 
     /**
-     * Kills the player on touching a danger tile, fades the sprite out,
-     * and smoothly resets the level with a sliding black fade once finished.
+     * Returns the world Y threshold below which the player is considered
+     * to have fallen far off the map, or null if level bounds are unavailable.
      */
-    private triggerPlayerDeath(): void {
+    private getFallDeathY(): number | null {
+        const mapBottom =
+            this.currentLevel?.map?.heightInPixels ??
+            this.physics?.world?.bounds?.bottom;
+        if (typeof mapBottom !== 'number') {
+            return null;
+        }
+
+        const cameraBottom = this.cameras?.main?.getBounds?.()?.bottom;
+        const bottomEdge =
+            typeof cameraBottom === 'number'
+                ? Math.max(mapBottom, cameraBottom)
+                : mapBottom;
+
+        return bottomEdge + this.fallDeathMarginPx;
+    }
+
+    private checkFallenOffMap(): boolean {
+        if (!this.isSimulating || this.isDying) return false;
+        const fallDeathY = this.getFallDeathY();
+        if (fallDeathY === null || this.player.y <= fallDeathY) return false;
+
+        this.triggerPlayerDeath(true);
+        return true;
+    }
+
+    /**
+     * Kills the player (e.g. on touching a danger tile or falling off the map),
+     * optionally fades the sprite out, and smoothly resets the level with a
+     * sliding black fade once finished.
+     */
+    private triggerPlayerDeath(skipFade: boolean = false): void {
         this.isDying = true;
         this.codeRunner.stop();
         this.player.stopMoving();
@@ -405,7 +545,7 @@ export class Game extends Phaser.Scene {
             EventBus.emit('code-stopped');
         };
 
-        if (this.tweens?.add) {
+        if (!skipFade && this.tweens?.add) {
             this.deathTween = this.tweens.add({
                 targets: this.player,
                 alpha: 0,
@@ -479,7 +619,7 @@ export class Game extends Phaser.Scene {
         this.cancelResetTransition();
 
         const viewWidth = this.scale?.width || 1024;
-        const viewHeight = this.scale?.height || 768;
+        const viewHeight = this.scale?.height || 832;
         const feather = Math.round(viewWidth * 0.25);
         const totalWidth = viewWidth + feather * 2;
         const textureKey = this.ensureResetFadeTexture(viewWidth, feather);
@@ -548,6 +688,7 @@ export class Game extends Phaser.Scene {
         this.player.reset();
         this.hud.reset();
         this.cameras.main.centerOn(this.player.x, this.player.y);
+        this.parallaxBg?.update();
     }
 
     private checkGoalReached(): void {
@@ -583,6 +724,7 @@ export class Game extends Phaser.Scene {
         if (this.isPaused) return;
         this.cancelDeathSequence();
         this.cancelResetTransition();
+        this.cancelIntroPan();
         this.hasRunStarted = true;
         this.codeRunner.stop();
         this.raycaster?.clearVisuals();
@@ -600,6 +742,7 @@ export class Game extends Phaser.Scene {
             (this.hasRunStarted || this.isDying);
         this.cancelDeathSequence();
         this.cancelResetTransition();
+        this.cancelIntroPan();
         this.isPaused = false;
         this.resumeAsSimulating = false;
         this.time.paused = false;
@@ -622,6 +765,7 @@ export class Game extends Phaser.Scene {
         this.time.paused = true;
         this.deathTween?.pause();
         this.resetTween?.pause();
+        this.introPanTween?.pause();
         this.cameras.main.stopFollow();
     }
 
@@ -632,6 +776,8 @@ export class Game extends Phaser.Scene {
             this.deathTween?.resume();
         } else if (this.isResetting) {
             this.resetTween?.resume();
+        } else if (this.introPanTween) {
+            this.introPanTween.resume();
         } else if (this.resumeAsSimulating) {
             this.isSimulating = true;
             this.physics.resume();
@@ -644,6 +790,7 @@ export class Game extends Phaser.Scene {
     private handleLoadLevel(levelId: number) {
         this.cancelDeathSequence();
         this.cancelResetTransition();
+        this.cancelIntroPan();
         this.hasRunStarted = false;
         this.isPaused = false;
         this.resumeAsSimulating = false;
