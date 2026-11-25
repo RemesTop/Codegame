@@ -62,6 +62,8 @@ function createDangerTestHarness(options: {
     dangerTiles: Array<{ index: number; left: number; top: number; size?: number }>;
     dangerGids?: number[];
     enableSlideOverlay?: boolean;
+    mapHeight?: number;
+    cameraBottom?: number;
 }) {
     const game = new Game();
     const createdTweens: MockTween[] = [];
@@ -120,6 +122,9 @@ function createDangerTestHarness(options: {
     const level = {
         collidingLayers: [layer],
         dangerGids: new Set(options.dangerGids ?? [37]),
+        ...(options.mapHeight !== undefined
+            ? { map: { heightInPixels: options.mapHeight } }
+            : {}),
     } as unknown as LoadedLevel;
 
     const codeRunner = {
@@ -145,6 +150,9 @@ function createDangerTestHarness(options: {
             centerOn: vi.fn(),
             startFollow: vi.fn(),
             setDeadzone: vi.fn(),
+            ...(options.cameraBottom !== undefined
+                ? { getBounds: vi.fn(() => ({ bottom: options.cameraBottom })) }
+                : {}),
         },
     };
     const time = {
@@ -416,5 +424,81 @@ describe('Danger tile configuration & death sequence', () => {
         expect(createdTweens[0].stop).toHaveBeenCalledOnce();
         expect(createdOverlays[0].destroy).toHaveBeenCalledOnce();
         expect(player.reset).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('Falling far off the map', () => {
+    test('falling slightly below the map bottom does not kill the player yet', () => {
+        const { game, codeRunner, createdTweens } = createDangerTestHarness({
+            // Center y = 1100 + 24 = 1124, within 320px margin below mapHeight 1024
+            playerBox: { x: 96, y: 1100, width: 32, height: 48 },
+            dangerTiles: [],
+            mapHeight: 1024,
+            cameraBottom: 1024,
+        });
+
+        game.update(0, 16);
+
+        expect(codeRunner.stop).not.toHaveBeenCalled();
+        expect(createdTweens).toHaveLength(0);
+    });
+
+    test('falling far below the map kills the player and resets via the sliding black fade without an off-screen sprite fade', () => {
+        const {
+            game,
+            player,
+            codeRunner,
+            hud,
+            physics,
+            cameras,
+            createdTweens,
+            createdOverlays,
+        } = createDangerTestHarness({
+            // Center y = 1350 + 24 = 1374 > 1024 + 320 (1344)
+            playerBox: { x: 96, y: 1350, width: 32, height: 48 },
+            dangerTiles: [],
+            enableSlideOverlay: true,
+            mapHeight: 1024,
+            cameraBottom: 1024,
+        });
+
+        game.update(0, 16);
+
+        // Immediately stops code, halts player, pauses physics, and starts Phase 1 slide (no sprite fade tween)
+        expect(codeRunner.stop).toHaveBeenCalledOnce();
+        expect(player.stopMoving).toHaveBeenCalledOnce();
+        expect(player.setVelocity).toHaveBeenCalledWith(0, 0);
+        expect(physics.pause).toHaveBeenCalledOnce();
+        expect(createdOverlays).toHaveLength(1);
+        expect(createdTweens).toHaveLength(1);
+        expect(createdTweens[0].config.targets).toBe(createdOverlays[0]);
+        expect(player.reset).not.toHaveBeenCalled();
+        expect(EventBus.emit).not.toHaveBeenCalledWith('code-stopped');
+
+        // Midpoint of slide resets the scene and emits code-stopped
+        createdTweens[0].config.onComplete?.();
+        expect(player.reset).toHaveBeenCalledOnce();
+        expect(hud.reset).toHaveBeenCalledOnce();
+        expect(cameras.main.centerOn).toHaveBeenCalledWith(20, 414);
+        expect(EventBus.emit).toHaveBeenCalledWith('code-stopped');
+    });
+
+    test('respects camera bottom when map is shorter than the viewport', () => {
+        const { game, player, codeRunner } = createDangerTestHarness({
+            // Map height is 512, camera bottom is 640 -> death threshold is 960
+            // Center y = 900 + 24 = 924 (below 512 + 320 = 832, but above 640 + 320 = 960)
+            playerBox: { x: 96, y: 900, width: 32, height: 48 },
+            dangerTiles: [],
+            mapHeight: 512,
+            cameraBottom: 640,
+        });
+
+        game.update(0, 16);
+        expect(codeRunner.stop).not.toHaveBeenCalled();
+
+        // Now move player past 960
+        player.y = 961;
+        game.update(0, 16);
+        expect(codeRunner.stop).toHaveBeenCalledOnce();
     });
 });

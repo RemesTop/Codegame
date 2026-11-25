@@ -23,6 +23,7 @@ export class Game extends Phaser.Scene {
     private resetOverlay: Phaser.GameObjects.Image | null = null;
     private readonly deathFadeDurationMs: number = 900;
     private readonly resetSlideHalfDurationMs: number = 350;
+    private readonly fallDeathMarginPx: number = 320;
     private isPaused: boolean = false;
     private resumeAsSimulating: boolean = false;
 
@@ -283,6 +284,7 @@ export class Game extends Phaser.Scene {
         if (!this.isSimulating || !this.player) return;
         this.player.update(delta);
         if (this.checkDangerTouched()) return;
+        if (this.checkFallenOffMap()) return;
         this.checkGoalReached();
     }
 
@@ -390,10 +392,41 @@ export class Game extends Phaser.Scene {
     }
 
     /**
-     * Kills the player on touching a danger tile, fades the sprite out,
-     * and smoothly resets the level with a sliding black fade once finished.
+     * Returns the world Y threshold below which the player is considered
+     * to have fallen far off the map, or null if level bounds are unavailable.
      */
-    private triggerPlayerDeath(): void {
+    private getFallDeathY(): number | null {
+        const mapBottom =
+            this.currentLevel?.map?.heightInPixels ??
+            this.physics?.world?.bounds?.bottom;
+        if (typeof mapBottom !== 'number') {
+            return null;
+        }
+
+        const cameraBottom = this.cameras?.main?.getBounds?.()?.bottom;
+        const bottomEdge =
+            typeof cameraBottom === 'number'
+                ? Math.max(mapBottom, cameraBottom)
+                : mapBottom;
+
+        return bottomEdge + this.fallDeathMarginPx;
+    }
+
+    private checkFallenOffMap(): boolean {
+        if (!this.isSimulating || this.isDying) return false;
+        const fallDeathY = this.getFallDeathY();
+        if (fallDeathY === null || this.player.y <= fallDeathY) return false;
+
+        this.triggerPlayerDeath(true);
+        return true;
+    }
+
+    /**
+     * Kills the player (e.g. on touching a danger tile or falling off the map),
+     * optionally fades the sprite out, and smoothly resets the level with a
+     * sliding black fade once finished.
+     */
+    private triggerPlayerDeath(skipFade: boolean = false): void {
         this.isDying = true;
         this.codeRunner.stop();
         this.player.stopMoving();
@@ -405,24 +438,24 @@ export class Game extends Phaser.Scene {
             EventBus.emit('code-stopped');
         };
 
-        if (this.tweens?.add) {
-            this.deathTween = this.tweens.add({
-                targets: this.player,
-                alpha: 0,
-                duration: this.deathFadeDurationMs,
-                ease: 'Linear',
-                onComplete: () => {
-                    if (!this.isDying) return;
-                    this.deathTween = null;
-                    this.isDying = false;
-                    this.playResetSlideTransition(completeDeathReset);
-                },
-            });
-        } else {
-            this.isDying = false;
-            this.playResetSlideTransition(completeDeathReset);
+            if (!skipFade && this.tweens?.add) {
+                this.deathTween = this.tweens.add({
+                    targets: this.player,
+                    alpha: 0,
+                    duration: this.deathFadeDurationMs,
+                    ease: 'Linear',
+                    onComplete: () => {
+                        if (!this.isDying) return;
+                        this.deathTween = null;
+                        this.isDying = false;
+                        this.playResetSlideTransition(completeDeathReset);
+                    },
+                });
+            } else {
+                this.isDying = false;
+                this.playResetSlideTransition(completeDeathReset);
+            }
         }
-    }
 
     private cancelDeathSequence(): void {
         if (this.deathTween) {

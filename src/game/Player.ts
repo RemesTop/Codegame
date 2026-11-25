@@ -80,15 +80,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         }
 
         this.setVelocityX(currentVx);
-
-        // Once the player falls completely below the level bounds, halt vertical velocity so coordinates stay reasonable
-        const worldBottom = Math.max(
-            this.scene.scale.height,
-            this.scene.physics.world.bounds.bottom
-        );
-        if (this.y > worldBottom + 200) {
-            this.setVelocityY(0);
-        }
     }
 
     /**
