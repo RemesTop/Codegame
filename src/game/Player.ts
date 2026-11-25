@@ -2,6 +2,17 @@ import * as Phaser from 'phaser';
 
 export type MovementState = 'LEFT' | 'RIGHT' | 'STOP';
 
+interface SleepParticle {
+    text: Phaser.GameObjects.Text;
+    offsetX: number;
+    offsetY: number;
+    vx: number;
+    vy: number;
+    ageMs: number;
+    lifetimeMs: number;
+    swayPhase: number;
+}
+
 /**
  * Player character entity extending Arcade Sprite.
  * Encapsulates movement state, horizontal kinematics (acceleration/deceleration),
@@ -19,6 +30,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     private readonly accelerationX: number = 650; // Horizontal acceleration (pixels/sec^2)
     private readonly decelerationX: number = 750; // Horizontal braking/friction (pixels/sec^2)
     private readonly jumpVelocityY: number = 400; // Upward jump impulse (pixels/sec)
+
+    // Sleep indicator ("z" particle) state
+    private isSleeping: boolean = false;
+    private sleepParticleCooldownMs: number = 0;
+    private readonly sleepParticleIntervalMs: number = 450;
+    private readonly sleepParticleLifetimeMs: number = 900;
+    private sleepParticles: SleepParticle[] = [];
 
     constructor(scene: Phaser.Scene, x: number, y: number, texture: string = 'dude') {
         // If the requested texture is not in cache, create a clean default sprite texture
@@ -80,6 +98,82 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         }
 
         this.setVelocityX(currentVx);
+        this.updateSleepParticles(delta);
+    }
+
+    public setSleeping(sleeping: boolean): void {
+        this.isSleeping = sleeping;
+    }
+
+    private updateSleepParticles(delta: number): void {
+        if (this.sleepParticleCooldownMs > 0) {
+            this.sleepParticleCooldownMs = Math.max(0, this.sleepParticleCooldownMs - delta);
+        }
+
+        if (this.isSleeping && this.sleepParticleCooldownMs <= 0) {
+            this.spawnSleepParticle();
+            this.sleepParticleCooldownMs = this.sleepParticleIntervalMs;
+        }
+
+        const dt = delta / 1000;
+        for (let i = this.sleepParticles.length - 1; i >= 0; i--) {
+            const p = this.sleepParticles[i];
+            p.ageMs += delta;
+            if (p.ageMs >= p.lifetimeMs) {
+                p.text.destroy();
+                this.sleepParticles.splice(i, 1);
+                continue;
+            }
+
+            const progress = p.ageMs / p.lifetimeMs;
+            p.offsetX += p.vx * dt;
+            p.offsetY += p.vy * dt;
+            const swayX = Math.sin((p.ageMs / 1000) * 5 + p.swayPhase) * 5;
+            p.text.setPosition(this.x + p.offsetX + swayX, this.y + p.offsetY);
+            p.text.setAlpha(1 - progress * progress);
+            p.text.setScale(0.75 + progress * 0.35);
+        }
+    }
+
+    private spawnSleepParticle(): void {
+        if (!this.scene?.add?.text) return;
+
+        const halfHeight = (this.displayHeight || this.height || 48) / 2;
+        const offsetX = Math.random() * 12 + 8;
+        const offsetY = -halfHeight - 4;
+        const startX = this.x + offsetX;
+        const startY = this.y + offsetY;
+
+        const text = this.scene.add.text(startX, startY, 'z', {
+            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            stroke: '#0f172a',
+            strokeThickness: 3,
+            resolution: 2,
+        });
+        text.setOrigin(0.5, 0.5);
+        text.setDepth((this.depth ?? 10) + 1);
+        text.setScale(0.75);
+
+        this.sleepParticles.push({
+            text,
+            offsetX,
+            offsetY,
+            vx: 8 + Math.random() * 8,
+            vy: -36 - Math.random() * 10,
+            ageMs: 0,
+            lifetimeMs: this.sleepParticleLifetimeMs,
+            swayPhase: Math.random() * Math.PI * 2,
+        });
+    }
+
+    private clearSleepParticles(): void {
+        for (const p of this.sleepParticles) {
+            p.text.destroy();
+        }
+        this.sleepParticles = [];
     }
 
     /**
@@ -124,6 +218,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
      */
     public reset(): void {
         this.movementState = 'STOP';
+        this.isSleeping = false;
+        this.sleepParticleCooldownMs = 0;
+        this.clearSleepParticles();
         if (typeof this.setAlpha === 'function') {
             this.setAlpha(1);
         } else {
@@ -136,6 +233,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             this.setVelocity(0, 0);
             this.setPosition(this.spawnX, this.spawnY);
         }
+    }
+
+    public override destroy(fromScene?: boolean): void {
+        this.clearSleepParticles();
+        super.destroy(fromScene);
     }
 }
 

@@ -66,9 +66,12 @@ export class Game extends Phaser.Scene {
                 this.hud.registerTrack(label, valueOrGetter),
         };
 
-        // Initialize CodeRunner with scene, API, and post-tick HUD refresh callback
-        this.codeRunner = new CodeRunner(this, api, () =>
-            this.hud.evaluateTrackedVariables()
+        // Initialize CodeRunner with scene, API, post-tick HUD refresh, and sleep particle state callback
+        this.codeRunner = new CodeRunner(
+            this,
+            api,
+            () => this.hud.evaluateTrackedVariables(),
+            (isSleeping: boolean) => this.player?.setSleeping(isSleeping)
         );
 
         // --- Preview Camera Panning / Scrolling (active while frozen before Run) ---

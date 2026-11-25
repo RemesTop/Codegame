@@ -403,16 +403,24 @@ export class CodeRunner {
     private scene: Phaser.Scene;
     private api: RobotAPI;
     private onPostTick?: () => void;
+    private onSleepStateChange?: (isSleeping: boolean) => void;
     private isUpdating: boolean = false;
+    private activeSleepCount: number = 0;
     private currentRunId: number = 0;
     private playerUpdateFn: (() => Promise<void> | void) | null = null;
     private codeTimer: Phaser.Time.TimerEvent | null = null;
     private readonly tickIntervalMs: number = 100;
 
-    constructor(scene: Phaser.Scene, api: RobotAPI, onPostTick?: () => void) {
+    constructor(
+        scene: Phaser.Scene,
+        api: RobotAPI,
+        onPostTick?: () => void,
+        onSleepStateChange?: (isSleeping: boolean) => void
+    ) {
         this.scene = scene;
         this.api = api;
         this.onPostTick = onPostTick;
+        this.onSleepStateChange = onSleepStateChange;
     }
 
     /**
@@ -425,6 +433,11 @@ export class CodeRunner {
         this.onPostTick?.();
 
         const safeMs = Math.max(0, Number(ms) || 0);
+        const wasSleeping = this.activeSleepCount > 0;
+        this.activeSleepCount++;
+        if (!wasSleeping) {
+            this.onSleepStateChange?.(true);
+        }
 
         return new Promise<void>((resolve, reject) => {
             this.scene.time.delayedCall(safeMs, () => {
@@ -432,6 +445,11 @@ export class CodeRunner {
                 if (this.currentRunId !== runId) {
                     reject(new Error('__EXECUTION_ABORTED__'));
                     return;
+                }
+
+                this.activeSleepCount = Math.max(0, this.activeSleepCount - 1);
+                if (this.activeSleepCount === 0) {
+                    this.onSleepStateChange?.(false);
                 }
 
                 // Keep HUD fresh when sleep finishes
@@ -531,11 +549,20 @@ export class CodeRunner {
         this.currentRunId++;
         this.isUpdating = false;
 
+        if (this.activeSleepCount > 0) {
+            this.activeSleepCount = 0;
+            this.onSleepStateChange?.(false);
+        }
+
         if (this.codeTimer) {
             this.codeTimer.remove();
             this.codeTimer = null;
         }
         this.playerUpdateFn = null;
+    }
+
+    isSleeping(): boolean {
+        return this.activeSleepCount > 0;
     }
 
     isRunning(): boolean {
