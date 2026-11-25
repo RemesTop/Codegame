@@ -20,9 +20,14 @@ export class Game extends Phaser.Scene {
     private hasRunStarted: boolean = false;
     private deathTween: Phaser.Tweens.Tween | null = null;
     private resetTween: Phaser.Tweens.Tween | null = null;
+    private introPanTween: Phaser.Tweens.Tween | null = null;
     private resetOverlay: Phaser.GameObjects.Image | null = null;
     private readonly deathFadeDurationMs: number = 900;
     private readonly resetSlideHalfDurationMs: number = 350;
+    private readonly introPanSpeedPxPerSec: number = 180;
+    private readonly introPanMinDurationMs: number = 1400;
+    private readonly introPanMaxDurationMs: number = 4500;
+    private readonly introPanDelayMs: number = 200;
     private readonly fallDeathMarginPx: number = 320;
     private isPaused: boolean = false;
     private resumeAsSimulating: boolean = false;
@@ -120,6 +125,7 @@ export class Game extends Phaser.Scene {
     public loadLevel(levelId: number): void {
         this.cancelDeathSequence();
         this.cancelResetTransition();
+        this.cancelIntroPan();
         this.hasRunStarted = false;
         this.currentLevelId = levelId;
         this.raycaster?.clearVisuals();
@@ -158,6 +164,92 @@ export class Game extends Phaser.Scene {
 
         // Keep player and game logic frozen until Run is pressed
         this.freezeSimulation();
+
+        // Play a one-time overview camera pan across the level
+        this.playLevelIntroPan(loaded.spawn);
+    }
+
+    /**
+     * Plays a one-time smooth camera pan when a level loads:
+     * - Horizontal levels: scrolls smoothly from right to left.
+     * - Vertical levels: scrolls smoothly from top to bottom.
+     * Automatically cancels if the user scrolls/drags, runs code, or switches levels.
+     */
+    private playLevelIntroPan(spawn: { x: number; y: number }): void {
+        this.cancelIntroPan();
+
+        const cam = this.cameras?.main;
+        if (!cam || typeof cam.getBounds !== 'function' || !this.tweens?.add) {
+            return;
+        }
+
+        const bounds = cam.getBounds();
+        const minScrollX = bounds.x;
+        const maxScrollX = Math.max(bounds.x, bounds.right - cam.width);
+        const minScrollY = bounds.y;
+        const maxScrollY = Math.max(bounds.y, bounds.bottom - cam.height);
+
+        const scrollRangeX = maxScrollX - minScrollX;
+        const scrollRangeY = maxScrollY - minScrollY;
+
+        if (scrollRangeX <= 0 && scrollRangeY <= 0) {
+            return;
+        }
+
+        const isHorizontal = scrollRangeX > 0 && scrollRangeX >= scrollRangeY;
+        const distance = isHorizontal ? scrollRangeX : scrollRangeY;
+        const duration = Phaser.Math.Clamp(
+            Math.round((distance / this.introPanSpeedPxPerSec) * 1000),
+            this.introPanMinDurationMs,
+            this.introPanMaxDurationMs
+        );
+
+        if (isHorizontal) {
+            const targetY = Phaser.Math.Clamp(
+                spawn.y - cam.height / 2,
+                minScrollY,
+                maxScrollY
+            );
+            cam.scrollX = maxScrollX;
+            cam.scrollY = targetY;
+
+            this.introPanTween = this.tweens.add({
+                targets: cam,
+                scrollX: minScrollX,
+                duration,
+                delay: this.introPanDelayMs,
+                ease: 'Sine.easeInOut',
+                onComplete: () => {
+                    this.introPanTween = null;
+                },
+            });
+        } else {
+            const targetX = Phaser.Math.Clamp(
+                spawn.x - cam.width / 2,
+                minScrollX,
+                maxScrollX
+            );
+            cam.scrollX = targetX;
+            cam.scrollY = minScrollY;
+
+            this.introPanTween = this.tweens.add({
+                targets: cam,
+                scrollY: maxScrollY,
+                duration,
+                delay: this.introPanDelayMs,
+                ease: 'Sine.easeInOut',
+                onComplete: () => {
+                    this.introPanTween = null;
+                },
+            });
+        }
+    }
+
+    private cancelIntroPan(): void {
+        if (this.introPanTween) {
+            this.introPanTween.stop();
+            this.introPanTween = null;
+        }
     }
 
     /**
@@ -178,6 +270,7 @@ export class Game extends Phaser.Scene {
                 deltaY: number
             ) => {
                 if (this.isSimulating || this.isDying || this.isResetting) return;
+                this.cancelIntroPan();
 
                 const cam = this.cameras.main;
                 const bounds = cam.getBounds();
@@ -199,6 +292,7 @@ export class Game extends Phaser.Scene {
 
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (this.isSimulating || this.isDying || this.isResetting) return;
+            this.cancelIntroPan();
             isDragging = true;
             lastPointerX = pointer.x;
             lastPointerY = pointer.y;
@@ -624,6 +718,7 @@ export class Game extends Phaser.Scene {
         if (this.isPaused) return;
         this.cancelDeathSequence();
         this.cancelResetTransition();
+        this.cancelIntroPan();
         this.hasRunStarted = true;
         this.codeRunner.stop();
         this.raycaster?.clearVisuals();
@@ -641,6 +736,7 @@ export class Game extends Phaser.Scene {
             (this.hasRunStarted || this.isDying);
         this.cancelDeathSequence();
         this.cancelResetTransition();
+        this.cancelIntroPan();
         this.isPaused = false;
         this.resumeAsSimulating = false;
         this.time.paused = false;
@@ -663,6 +759,7 @@ export class Game extends Phaser.Scene {
         this.time.paused = true;
         this.deathTween?.pause();
         this.resetTween?.pause();
+        this.introPanTween?.pause();
         this.cameras.main.stopFollow();
     }
 
@@ -673,6 +770,8 @@ export class Game extends Phaser.Scene {
             this.deathTween?.resume();
         } else if (this.isResetting) {
             this.resetTween?.resume();
+        } else if (this.introPanTween) {
+            this.introPanTween.resume();
         } else if (this.resumeAsSimulating) {
             this.isSimulating = true;
             this.physics.resume();
@@ -685,6 +784,7 @@ export class Game extends Phaser.Scene {
     private handleLoadLevel(levelId: number) {
         this.cancelDeathSequence();
         this.cancelResetTransition();
+        this.cancelIntroPan();
         this.hasRunStarted = false;
         this.isPaused = false;
         this.resumeAsSimulating = false;
