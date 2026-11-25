@@ -69,8 +69,8 @@ export class Game extends Phaser.Scene {
 
     preload() {
         this.load.setPath('assets');
-        this.load.image('bg-sky', 'bg_test_SKY.png');
-        this.load.image('bg-city', 'bg_test_CITY.png');
+        this.load.image('bg-sky', 'bg_blue_SKY.png');
+        this.load.image('bg-city', 'bg_blue_CITY.png');
         this.load.image('keycard', 'keycard1.png');
         this.load.image('door-closed', 'Locked-door-1.png');
         this.load.image('door-open', 'Locked-door-2.png');

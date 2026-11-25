@@ -15,6 +15,14 @@ export interface ParallaxConfig {
     maxSkyTravelY: number;
     /** Maximum vertical parallax offset (px) for the city layer on very tall maps. */
     maxCityTravelY: number;
+    /** Opacity of the sky layer (blends toward canvas backgroundColor if < 1). */
+    skyAlpha: number;
+    /** Subtle blur strength on the far sky layer so it matches the city softness (0 disables blur). */
+    skyBlurStrength: number;
+    /** Opacity of the city layer so it blends softly into the sky behind foreground tiles. */
+    cityAlpha: number;
+    /** Subtle blur strength on the city layer for background depth (0 disables blur). */
+    cityBlurStrength: number;
 }
 
 export const DEFAULT_PARALLAX_CONFIG: ParallaxConfig = {
@@ -26,6 +34,10 @@ export const DEFAULT_PARALLAX_CONFIG: ParallaxConfig = {
     cityFactorY: 0.3,
     maxSkyTravelY: 260,
     maxCityTravelY: 220,
+    skyAlpha: 0.85,
+    skyBlurStrength: 0.5,
+    cityAlpha: 1,
+    cityBlurStrength: 0.3,
 };
 
 /**
@@ -62,7 +74,10 @@ export class ParallaxBackground {
             .tileSprite(0, 0, viewWidth, viewHeight, this.config.skyTextureKey)
             .setOrigin(0, 0)
             .setScrollFactor(0)
-            .setDepth(-20);
+            .setDepth(-20)
+            .setAlpha(this.config.skyAlpha);
+
+        this.applyLayerBlur(this.skyLayer, this.config.skyBlurStrength);
 
         this.skySourceHeight = this.skyLayer.frame?.height || 768;
 
@@ -70,12 +85,25 @@ export class ParallaxBackground {
             .tileSprite(0, 0, viewWidth, 768, this.config.cityTextureKey)
             .setOrigin(0, 0)
             .setScrollFactor(0)
-            .setDepth(-10);
+            .setDepth(-10)
+            .setAlpha(this.config.cityAlpha);
+
+        this.applyLayerBlur(this.cityLayer, this.config.cityBlurStrength);
 
         this.citySourceHeight = this.cityLayer.frame?.height || 768;
         this.cityLayer.setSize(viewWidth, this.citySourceHeight);
 
         this.configureForCamera();
+    }
+
+    private applyLayerBlur(
+        layer: Phaser.GameObjects.TileSprite,
+        strength: number
+    ): void {
+        if (strength > 0 && typeof layer.enableFilters === 'function') {
+            layer.enableFilters();
+            layer.filters?.internal?.addBlur(0, 2, 2, strength);
+        }
     }
 
     /**
