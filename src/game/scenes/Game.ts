@@ -21,12 +21,20 @@ interface DoorEntity {
     isOpen: boolean;
 }
 
+interface TeleportBeamBar {
+    rect: Phaser.GameObjects.Rectangle;
+    baseY: number;
+    riseHeight: number;
+    progress: number;
+}
+
 export class Game extends Phaser.Scene {
     private player!: Player;
     private currentLevelId: number = 1;
     private currentLevel: LoadedLevel | null = null;
     private tilemapCollider: TilemapCollider | null = null;
-    private goalMarker: Phaser.GameObjects.Rectangle | null = null;
+    private goalMarker: Phaser.GameObjects.Image | null = null;
+    private goalTeleportBars: TeleportBeamBar[] = [];
     private keycardEntities: KeycardEntity[] = [];
     private doorEntities: DoorEntity[] = [];
     private readonly doorOpenRangeX: number = 80;
@@ -66,6 +74,7 @@ export class Game extends Phaser.Scene {
         this.load.image('keycard', 'keycard1.png');
         this.load.image('door-closed', 'Locked-door-1.png');
         this.load.image('door-open', 'Locked-door-2.png');
+        this.load.image('goal-teleport', 'teleport1.png');
         LevelLoader.preload(this);
     }
 
@@ -130,6 +139,7 @@ export class Game extends Phaser.Scene {
             this.tilemapCollider?.destroy();
             this.tilemapCollider = null;
             this.destroyLevelInteractables();
+            this.destroyGoalTeleportEffect();
             this.goalMarker?.destroy();
             this.goalMarker = null;
             this.currentLevel?.destroy();
@@ -152,6 +162,7 @@ export class Game extends Phaser.Scene {
         this.tilemapCollider?.destroy();
         this.tilemapCollider = null;
         this.destroyLevelInteractables();
+        this.destroyGoalTeleportEffect();
         this.goalMarker?.destroy();
         this.goalMarker = null;
         this.currentLevel?.destroy();
@@ -160,16 +171,11 @@ export class Game extends Phaser.Scene {
         this.currentLevel = loaded;
 
         if (loaded.goal) {
-            this.goalMarker = this.add.rectangle(
-                loaded.goal.x,
-                loaded.goal.y,
-                loaded.goal.width,
-                loaded.goal.height,
-                0x22c55e,
-                0.85
-            );
-            this.goalMarker.setStrokeStyle(2, 0xffffff, 1);
-            this.goalMarker.setDepth(5);
+            this.goalMarker = this.add
+                .image(loaded.goal.x, loaded.goal.y, 'goal-teleport')
+                .setOrigin(0.5, 0.5)
+                .setDepth(5);
+            this.spawnGoalTeleportEffect(loaded.goal.x, loaded.goal.y);
         }
 
         if (!this.player) {
@@ -411,6 +417,7 @@ export class Game extends Phaser.Scene {
     update(time: number, delta: number) {
         this.parallaxBg?.update();
         this.animateWorldKeycards(time);
+        this.updateGoalTeleportEffect(delta);
         if (!this.isSimulating || !this.player) return;
         this.player.update(delta);
         this.checkKeycardPickups();
@@ -418,6 +425,64 @@ export class Game extends Phaser.Scene {
         if (this.checkDangerTouched()) return;
         if (this.checkFallenOffMap()) return;
         this.checkGoalReached();
+    }
+
+    /**
+     * Spawns thin wide opaque blue bars that rise continuously from the teleporter base.
+     */
+    private spawnGoalTeleportEffect(goalX: number, goalY: number): void {
+        this.destroyGoalTeleportEffect();
+        if (!this.add?.rectangle) return;
+
+        const barCount = 4;
+        const barWidth = 24;
+        const barHeight = 3;
+        const baseY = goalY + 11;
+        const riseHeight = 36;
+
+        for (let i = 0; i < barCount; i++) {
+            const progress = i / barCount;
+            const rect = this.add
+                .rectangle(
+                    Math.round(goalX),
+                    Math.round(baseY - progress * riseHeight),
+                    barWidth,
+                    barHeight,
+                    0x38bdf8,
+                    1
+                )
+                .setOrigin(0.5, 0.5)
+                .setDepth(6);
+
+            this.goalTeleportBars.push({
+                rect,
+                baseY,
+                riseHeight,
+                progress,
+            });
+        }
+    }
+
+    private updateGoalTeleportEffect(delta: number): void {
+        if (this.goalTeleportBars.length === 0 || this.isPaused) return;
+
+        const cycleMs = 1400;
+        const step = delta / cycleMs;
+
+        for (const bar of this.goalTeleportBars) {
+            bar.progress = (bar.progress + step) % 1;
+            bar.rect.setY(Math.round(bar.baseY - bar.progress * bar.riseHeight));
+            bar.rect.setAlpha(
+                bar.progress > 0.8 ? (1 - bar.progress) / 0.2 : 1
+            );
+        }
+    }
+
+    private destroyGoalTeleportEffect(): void {
+        for (const bar of this.goalTeleportBars) {
+            bar.rect.destroy();
+        }
+        this.goalTeleportBars = [];
     }
 
     private spawnLevelInteractables(loaded: LoadedLevel): void {
@@ -521,24 +586,24 @@ export class Game extends Phaser.Scene {
 
             const dx = Math.abs(this.player.x - door.sprite.x);
             const dy = Math.abs(this.player.y - door.sprite.y);
-                if (dx <= this.doorOpenRangeX && dy <= this.doorOpenRangeY) {
-                    door.isOpen = true;
-                    door.sprite.setTexture('door-open');
-                    const body = door.sprite.body as Phaser.Physics.Arcade.StaticBody | null;
-                    if (body) {
-                        body.enable = false;
-                    }
-                    this.player.setHasKeycard(false);
-                    break;
+            if (dx <= this.doorOpenRangeX && dy <= this.doorOpenRangeY) {
+                door.isOpen = true;
+                door.sprite.setTexture('door-open');
+                const body = door.sprite.body as Phaser.Physics.Arcade.StaticBody | null;
+                if (body) {
+                    body.enable = false;
                 }
+                this.player.setHasKeycard(false);
+                break;
             }
         }
+    }
 
     private detect(
-            angle: number = 0,
-            type: string = 'any',
-            maxDistance?: number
-        ): number | boolean | undefined {
+        angle: number = 0,
+        type: string = 'any',
+        maxDistance?: number
+    ): number | boolean | undefined {
         if (!this.player || !this.currentLevel || !this.raycaster) {
             return maxDistance !== undefined ? false : undefined;
         }
