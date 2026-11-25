@@ -43,8 +43,13 @@ export class Game extends Phaser.Scene {
     }
 
     create() {
-        // Keep the background pinned to the viewport when the camera follows the player
-        this.add.image(512, 384, 'background').setScrollFactor(0);
+        // Keep the background pinned and sized to the viewport when the camera follows the player
+        const viewWidth = this.scale?.width || 1024;
+        const viewHeight = this.scale?.height || 832;
+        this.add
+            .image(viewWidth / 2, viewHeight / 2, 'background')
+            .setDisplaySize(viewWidth, viewHeight)
+            .setScrollFactor(0);
 
         // Load initial level from URL query param (?level=...)
         this.currentLevelId = getLevelIdFromUrl();
@@ -441,24 +446,24 @@ export class Game extends Phaser.Scene {
             EventBus.emit('code-stopped');
         };
 
-            if (!skipFade && this.tweens?.add) {
-                this.deathTween = this.tweens.add({
-                    targets: this.player,
-                    alpha: 0,
-                    duration: this.deathFadeDurationMs,
-                    ease: 'Linear',
-                    onComplete: () => {
-                        if (!this.isDying) return;
-                        this.deathTween = null;
-                        this.isDying = false;
-                        this.playResetSlideTransition(completeDeathReset);
-                    },
-                });
-            } else {
-                this.isDying = false;
-                this.playResetSlideTransition(completeDeathReset);
-            }
+        if (!skipFade && this.tweens?.add) {
+            this.deathTween = this.tweens.add({
+                targets: this.player,
+                alpha: 0,
+                duration: this.deathFadeDurationMs,
+                ease: 'Linear',
+                onComplete: () => {
+                    if (!this.isDying) return;
+                    this.deathTween = null;
+                    this.isDying = false;
+                    this.playResetSlideTransition(completeDeathReset);
+                },
+            });
+        } else {
+            this.isDying = false;
+            this.playResetSlideTransition(completeDeathReset);
         }
+    }
 
     private cancelDeathSequence(): void {
         if (this.deathTween) {
@@ -515,7 +520,7 @@ export class Game extends Phaser.Scene {
         this.cancelResetTransition();
 
         const viewWidth = this.scale?.width || 1024;
-        const viewHeight = this.scale?.height || 768;
+        const viewHeight = this.scale?.height || 832;
         const feather = Math.round(viewWidth * 0.25);
         const totalWidth = viewWidth + feather * 2;
         const textureKey = this.ensureResetFadeTexture(viewWidth, feather);

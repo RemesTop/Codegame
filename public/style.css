@@ -6,12 +6,10 @@
     --accent-pink: #eab2b8;
     --accent-mauve: #cf7e85;
     --accent-cyan: #9ed0dd;
-    --accent-gradient: linear-gradient(
-        90deg,
-        #f1a72a 0%,
-        #e44f35 48%,
-        #4d7ff3 100%
-    );
+    --accent-gradient: linear-gradient(90deg,
+            #f1a72a 0%,
+            #e44f35 48%,
+            #4d7ff3 100%);
     --text-primary: #f5eef8;
     --text-muted: #c0abc9;
 }
@@ -39,7 +37,7 @@ body {
 
 /* Left side: Phaser canvas container */
 .game-view {
-    flex: 1;
+    flex: 1.15;
     display: flex;
     flex-direction: column;
     position: relative;
@@ -51,8 +49,10 @@ body {
     flex: 1;
     width: 100%;
     min-height: 0;
+    box-sizing: border-box;
+    padding-top: 56px;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: center;
     position: relative;
 }
@@ -97,9 +97,11 @@ body {
 #game-container {
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-end;
     width: 100%;
     height: 100%;
+    min-width: 0;
+    min-height: 0;
 }
 
 #game-container canvas {
@@ -455,7 +457,7 @@ body {
     font-size: 26px;
 }
 
-.instructions-panel li + li {
+.instructions-panel li+li {
     margin-top: 10px;
 }
 
@@ -471,11 +473,9 @@ body {
 .level-select-page {
     width: 100vw;
     height: 100vh;
-    background: linear-gradient(
-        160deg,
-        var(--bg-space) 0%,
-        var(--bg-indigo) 100%
-    );
+    background: linear-gradient(160deg,
+            var(--bg-space) 0%,
+            var(--bg-indigo) 100%);
     color: var(--text-primary);
     display: flex;
     flex-direction: column;
