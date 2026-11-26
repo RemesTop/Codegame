@@ -37,8 +37,8 @@ export class Game extends Phaser.Scene {
     private goalTeleportBars: TeleportBeamBar[] = [];
     private keycardEntities: KeycardEntity[] = [];
     private doorEntities: DoorEntity[] = [];
-    private readonly doorOpenRangeX: number = 80;
-    private readonly doorOpenRangeY: number = 64;
+    private readonly doorOpenRangeX: number = 160;
+    private readonly doorOpenRangeY: number = 128;
     private isSimulating: boolean = false;
     private isDying: boolean = false;
     private isResetting: boolean = false;
@@ -49,11 +49,11 @@ export class Game extends Phaser.Scene {
     private resetOverlay: Phaser.GameObjects.Image | null = null;
     private readonly deathFadeDurationMs: number = 900;
     private readonly resetSlideHalfDurationMs: number = 350;
-    private readonly introPanSpeedPxPerSec: number = 180;
+    private readonly introPanSpeedPxPerSec: number = 360;
     private readonly introPanMinDurationMs: number = 1400;
     private readonly introPanMaxDurationMs: number = 4500;
     private readonly introPanDelayMs: number = 200;
-    private readonly fallDeathMarginPx: number = 320;
+    private readonly fallDeathMarginPx: number = 640;
     private isPaused: boolean = false;
     private resumeAsSimulating: boolean = false;
 
@@ -174,6 +174,7 @@ export class Game extends Phaser.Scene {
             this.goalMarker = this.add
                 .image(loaded.goal.x, loaded.goal.y, 'goal-teleport')
                 .setOrigin(0.5, 0.5)
+                .setScale(2)
                 .setDepth(5);
             this.spawnGoalTeleportEffect(loaded.goal.x, loaded.goal.y);
         }
@@ -308,7 +309,7 @@ export class Game extends Phaser.Scene {
                 const canScrollY = bounds.height > cam.height;
                 const canScrollX = bounds.width > cam.width;
 
-                const wheelScale = 0.5;
+                const wheelScale = 1;
                 const scaledX = deltaX * wheelScale;
                 const scaledY = deltaY * wheelScale;
 
@@ -371,8 +372,8 @@ export class Game extends Phaser.Scene {
 
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-            const tileW = this.currentLevel?.map.tileWidth ?? 32;
-            const tileH = this.currentLevel?.map.tileHeight ?? 32;
+            const tileW = this.currentLevel?.map.tileWidth ?? 64;
+            const tileH = this.currentLevel?.map.tileHeight ?? 64;
             const mapHeight = this.currentLevel?.map.heightInPixels ?? this.scale.height;
             const x = Math.round(pixelsToUnits(worldPoint.x, tileW));
             const y = Math.round(pixelsToUnits(mapHeight - worldPoint.y, tileH));
@@ -406,7 +407,7 @@ export class Game extends Phaser.Scene {
         const cam = this.cameras.main;
         cam.centerOn(this.player.x, this.player.y);
         cam.startFollow(this.player, true, 0.12, 0.06);
-        cam.setDeadzone(180, 180);
+        cam.setDeadzone(360, 360);
         this.parallaxBg?.update();
     }
 
@@ -435,10 +436,10 @@ export class Game extends Phaser.Scene {
         if (!this.add?.rectangle) return;
 
         const barCount = 4;
-        const barWidth = 24;
-        const barHeight = 3;
-        const baseY = goalY + 11;
-        const riseHeight = 36;
+        const barWidth = 48;
+        const barHeight = 6;
+        const baseY = goalY + 22;
+        const riseHeight = 72;
 
         for (let i = 0; i < barCount; i++) {
             const progress = i / barCount;
@@ -451,6 +452,7 @@ export class Game extends Phaser.Scene {
                     0x38bdf8,
                     1
                 )
+                .setStrokeStyle(2, 0xffffff, 1)
                 .setOrigin(0.5, 0.5)
                 .setDepth(6);
 
@@ -490,6 +492,7 @@ export class Game extends Phaser.Scene {
             const sprite = this.add
                 .image(kc.x, kc.y, 'keycard')
                 .setOrigin(0.5, 0.5)
+                .setScale(2)
                 .setDepth(6);
             this.keycardEntities.push({
                 sprite,
@@ -502,6 +505,7 @@ export class Game extends Phaser.Scene {
             const sprite = this.physics.add
                 .staticImage(door.x, door.y, 'door-closed')
                 .setOrigin(0.5, 0.5)
+                .setScale(2)
                 .setDepth(4);
             sprite.refreshBody();
 
@@ -557,7 +561,7 @@ export class Game extends Phaser.Scene {
     private animateWorldKeycards(time: number): void {
         for (const kc of this.keycardEntities) {
             if (kc.collected) continue;
-            kc.sprite.setY(kc.baseY + Math.sin(time / 350) * 3);
+            kc.sprite.setY(kc.baseY + Math.sin(time / 350) * 6);
         }
     }
 
@@ -849,8 +853,8 @@ export class Game extends Phaser.Scene {
     private playResetSlideTransition(onMidpointReset: () => void): void {
         this.cancelResetTransition();
 
-        const viewWidth = this.scale?.width || 1024;
-        const viewHeight = this.scale?.height || 832;
+        const viewWidth = this.scale?.width || 2048;
+        const viewHeight = this.scale?.height || 1664;
         const feather = Math.round(viewWidth * 0.25);
         const totalWidth = viewWidth + feather * 2;
         const textureKey = this.ensureResetFadeTexture(viewWidth, feather);

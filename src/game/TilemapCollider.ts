@@ -90,11 +90,11 @@ export class TilemapCollider {
         // Downhill snap keeps the player glued to 45-degree slopes when walking down
         const downSnap =
             this.wasOnGround && body.velocity.y >= 0
-                ? Math.min(18, Math.abs(body.deltaX()) + 6)
+                ? Math.min(36, Math.abs(body.deltaX()) + 12)
                 : 0;
         const upSnap = Math.max(
-            16,
-            Math.abs(body.deltaX()) + Math.abs(body.deltaY()) + 8
+            32,
+            Math.abs(body.deltaX()) + Math.abs(body.deltaY()) + 16
         );
 
         let bestRampY: number | null = null;

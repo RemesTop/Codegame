@@ -247,8 +247,10 @@ beforeEach(() => {
 });
 
 describe('Danger tile configuration & death sequence', () => {
-    test('TilesetV0 registers local tile index 36 as danger', () => {
-        expect(TILESETS.TilesetV0.tileShapes[36]).toBe('danger');
+    test('TilesetV1 registers local tile index 44 as danger', () => {
+        expect(TILESETS.TilesetV1.tileShapes[44]).toBe('danger');
+        expect(TILESETS.TilesetV1.tileWidth).toBe(64);
+        expect(TILESETS.TilesetV1.tileHeight).toBe(64);
     });
 
     test('touching a danger tile stops execution, slowly fades the player out, and resets after fade completes', () => {
@@ -454,8 +456,8 @@ describe('Falling far off the map', () => {
             createdTweens,
             createdOverlays,
         } = createDangerTestHarness({
-            // Center y = 1350 + 24 = 1374 > 1024 + 320 (1344)
-            playerBox: { x: 96, y: 1350, width: 32, height: 48 },
+            // Center y = 1700 + 24 = 1724 > 1024 + 640 (1664)
+            playerBox: { x: 96, y: 1700, width: 32, height: 48 },
             dangerTiles: [],
             enableSlideOverlay: true,
             mapHeight: 1024,
@@ -485,9 +487,9 @@ describe('Falling far off the map', () => {
 
     test('respects camera bottom when map is shorter than the viewport', () => {
         const { game, player, codeRunner } = createDangerTestHarness({
-            // Map height is 512, camera bottom is 640 -> death threshold is 960
-            // Center y = 900 + 24 = 924 (below 512 + 320 = 832, but above 640 + 320 = 960)
-            playerBox: { x: 96, y: 900, width: 32, height: 48 },
+            // Map height is 512, camera bottom is 640 -> death threshold is 640 + 640 = 1280
+            // Center y = 1200 + 24 = 1224 (below 512 + 640 = 1152, but above 640 + 640 = 1280)
+            playerBox: { x: 96, y: 1200, width: 32, height: 48 },
             dangerTiles: [],
             mapHeight: 512,
             cameraBottom: 640,
@@ -496,8 +498,8 @@ describe('Falling far off the map', () => {
         game.update(0, 16);
         expect(codeRunner.stop).not.toHaveBeenCalled();
 
-        // Now move player past 960
-        player.y = 961;
+        // Now move player past 1280
+        player.y = 1281;
         game.update(0, 16);
         expect(codeRunner.stop).toHaveBeenCalledOnce();
     });

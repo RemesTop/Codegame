@@ -277,7 +277,7 @@ describe('castRay & Raycaster.detect', () => {
         raycaster.detect(16, 16, level, [], 0, 'ground');
 
         expect(graphicsInstances).toHaveLength(1);
-        expect(graphicsInstances[0].lineStyle).toHaveBeenCalledWith(2, 0xffffff, 0.9);
+        expect(graphicsInstances[0].lineStyle).toHaveBeenCalledWith(4, 0xffffff, 0.9);
         expect(graphicsInstances[0].lineBetween).toHaveBeenCalledWith(16, 16, 64, 16);
         expect(tweenConfigs).toHaveLength(1);
         expect(tweenConfigs[0].alpha).toBe(0);

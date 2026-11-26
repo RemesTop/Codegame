@@ -26,10 +26,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     private spawnY: number;
 
     // Horizontal Kinematics (isolated on X-axis so Y-axis gravity remains independent)
-    private readonly maxSpeedX: number = 240; // Max horizontal speed (pixels/sec)
-    private readonly accelerationX: number = 650; // Horizontal acceleration (pixels/sec^2)
-    private readonly decelerationX: number = 750; // Horizontal braking/friction (pixels/sec^2)
-    private readonly jumpVelocityY: number = 400; // Upward jump impulse (pixels/sec)
+    private readonly maxSpeedX: number = 480; // Max horizontal speed (pixels/sec, 7.5 tiles/sec)
+    private readonly accelerationX: number = 1300; // Horizontal acceleration (pixels/sec^2)
+    private readonly decelerationX: number = 1500; // Horizontal braking/friction (pixels/sec^2)
+    private readonly jumpVelocityY: number = 800; // Upward jump impulse (pixels/sec)
 
     // Sleep indicator ("z" particle) state
     private isSleeping: boolean = false;
@@ -48,10 +48,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         if (!scene.textures.exists(texture)) {
             const gfx = scene.make.graphics({ x: 0, y: 0 });
             gfx.fillStyle(0x000000, 1);
-            gfx.fillRect(0, 0, 32, 48);
-            gfx.lineStyle(2, 0xffffff, 1);
-            gfx.strokeRect(0, 0, 32, 48);
-            gfx.generateTexture(texture, 32, 48);
+            gfx.fillRect(0, 0, 64, 96);
+            gfx.lineStyle(4, 0xffffff, 1);
+            gfx.strokeRect(0, 0, 64, 96);
+            gfx.generateTexture(texture, 64, 96);
             gfx.destroy();
         }
 
@@ -71,7 +71,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.setBounce(0, 0);
 
         // Terminal velocity cap to prevent tunneling through platforms at extreme speeds
-        this.setMaxVelocity(this.maxSpeedX, 900);
+        this.setMaxVelocity(this.maxSpeedX, 1800);
     }
 
     /**
@@ -114,6 +114,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
                 this.heldKeycardSprite = this.scene.add
                     .image(Math.round(this.x), Math.round(this.y), 'keycard')
                     .setOrigin(0.5, 0.5)
+                    .setScale(2)
                     .setDepth((this.depth ?? 10) + 1);
             }
             if (!this.postUpdateBound && this.scene?.events?.on) {
@@ -142,11 +143,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     private updateHeldKeycard(): void {
         if (!this.hasKeycard || !this.heldKeycardSprite) return;
 
-        const halfWidth = (this.displayWidth || this.width || 32) / 2;
-        const offsetX = halfWidth + 18;
+        const halfWidth = (this.displayWidth || this.width || 64) / 2;
+        const offsetX = halfWidth + 36;
         this.heldKeycardSprite.setPosition(
             Math.round(this.x + offsetX),
-            Math.round(this.y - 4)
+            Math.round(this.y - 8)
         );
         this.heldKeycardSprite.setAlpha(this.alpha);
     }
@@ -178,7 +179,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             const progress = p.ageMs / p.lifetimeMs;
             p.offsetX += p.vx * dt;
             p.offsetY += p.vy * dt;
-            const swayX = Math.sin((p.ageMs / 1000) * 5 + p.swayPhase) * 5;
+            const swayX = Math.sin((p.ageMs / 1000) * 5 + p.swayPhase) * 10;
             p.text.setPosition(this.x + p.offsetX + swayX, this.y + p.offsetY);
             p.text.setAlpha(1 - progress * progress);
             p.text.setScale(0.75 + progress * 0.35);
@@ -188,19 +189,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     private spawnSleepParticle(): void {
         if (!this.scene?.add?.text) return;
 
-        const halfHeight = (this.displayHeight || this.height || 48) / 2;
-        const offsetX = Math.random() * 12 + 8;
-        const offsetY = -halfHeight - 4;
+        const halfHeight = (this.displayHeight || this.height || 96) / 2;
+        const offsetX = Math.random() * 24 + 16;
+        const offsetY = -halfHeight - 8;
         const startX = this.x + offsetX;
         const startY = this.y + offsetY;
 
         const text = this.scene.add.text(startX, startY, 'z', {
             fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-            fontSize: '13px',
+            fontSize: '26px',
             fontStyle: 'bold',
             color: '#ffffff',
             stroke: '#0f172a',
-            strokeThickness: 3,
+            strokeThickness: 6,
             resolution: 2,
         });
         text.setOrigin(0.5, 0.5);
@@ -211,8 +212,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             text,
             offsetX,
             offsetY,
-            vx: 8 + Math.random() * 8,
-            vy: -36 - Math.random() * 10,
+            vx: 16 + Math.random() * 16,
+            vy: -72 - Math.random() * 20,
             ageMs: 0,
             lifetimeMs: this.sleepParticleLifetimeMs,
             swayPhase: Math.random() * Math.PI * 2,
