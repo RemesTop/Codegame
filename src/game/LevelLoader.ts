@@ -120,8 +120,8 @@ function findGoalFromObjects(map: Phaser.Tilemaps.Tilemap): GoalRegion | null {
                     return {
                         x: obj.x,
                         y: obj.y,
-                        width: 32,
-                        height: 32,
+                        width: 64,
+                        height: 64,
                     };
                 }
             }
@@ -165,7 +165,8 @@ export function findDoorsFromObjects(map: Phaser.Tilemaps.Tilemap): DoorSpawn[] 
             const objType = (obj.type ?? '').toLowerCase();
             if (objName === 'door' || objType === 'door') {
                 if (typeof obj.x === 'number' && typeof obj.y === 'number') {
-                    doors.push({ x: obj.x, y: obj.y - 16 });
+                    const halfTileH = (map.tileHeight || 64) / 2;
+                    doors.push({ x: obj.x, y: obj.y - halfTileH });
                 }
             }
         }
@@ -174,7 +175,7 @@ export function findDoorsFromObjects(map: Phaser.Tilemaps.Tilemap): DoorSpawn[] 
 }
 
 /**
- * Loads Tiled JSON levels (with embedded tilesets) and 32x32 tilesets into a Phaser scene.
+ * Loads Tiled JSON levels (with embedded tilesets) and 64x64 tilesets into a Phaser scene.
  */
 export class LevelLoader {
     /**

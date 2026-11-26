@@ -15,19 +15,20 @@ export class GameHUD {
         this.scene = scene;
 
         // Compact semi-transparent dark background card in top-right corner
-        this.trackBg = this.scene.add.rectangle(0, 0, 100, 30, 0x1e1e1e, 0.85);
-        this.trackBg.setStrokeStyle(1, 0x444444);
+        this.trackBg = this.scene.add.rectangle(0, 0, 200, 60, 0x1e1e1e, 0.85);
+        this.trackBg.setStrokeStyle(2, 0x444444);
         this.trackBg.setDepth(200);
         this.trackBg.setScrollFactor(0);
         this.trackBg.setVisible(false);
 
         // Compact monospace text display aligned to the top-right
-        this.trackText = this.scene.add.text(1008 - 8, 16 + 8, '', {
+        const rightEdge = (this.scene.scale?.width || 2048) - 32;
+        this.trackText = this.scene.add.text(rightEdge - 16, 32 + 16, '', {
             fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-            fontSize: '14px',
+            fontSize: '28px',
             color: '#00ffcc',
             align: 'right',
-            lineSpacing: 4,
+            lineSpacing: 8,
             resolution: 2, // High-resolution rendering to prevent blurriness
         });
         this.trackText.setOrigin(1, 0);
@@ -100,14 +101,15 @@ export class GameHUD {
         this.trackText.setText(lines.join('\n'));
         this.trackBg.setVisible(true);
 
-        // Dynamically resize and position background box with 8px padding
-        const padding = 8;
+        // Dynamically resize and position background box with 16px padding
+        const padding = 16;
         const boxWidth = Math.round(this.trackText.width + padding * 2);
         const boxHeight = Math.round(this.trackText.height + padding * 2);
         this.trackBg.setSize(boxWidth, boxHeight);
+        const rightEdge = (this.scene.scale?.width || 2048) - 32;
         this.trackBg.setPosition(
-            Math.round(1008 - boxWidth / 2),
-            Math.round(16 + boxHeight / 2)
+            Math.round(rightEdge - boxWidth / 2),
+            Math.round(32 + boxHeight / 2)
         );
     }
 

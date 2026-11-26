@@ -65,6 +65,7 @@ function createInteractableHarness(options: {
         y: number;
         visible: boolean;
         setOrigin: ReturnType<typeof vi.fn>;
+        setScale: ReturnType<typeof vi.fn>;
         setDepth: ReturnType<typeof vi.fn>;
         setVisible: ReturnType<typeof vi.fn>;
         setY: ReturnType<typeof vi.fn>;
@@ -76,6 +77,7 @@ function createInteractableHarness(options: {
         y: number;
         texture: string;
         setOrigin: ReturnType<typeof vi.fn>;
+        setScale: ReturnType<typeof vi.fn>;
         setDepth: ReturnType<typeof vi.fn>;
         setTexture: ReturnType<typeof vi.fn>;
         refreshBody: ReturnType<typeof vi.fn>;
@@ -104,6 +106,7 @@ function createInteractableHarness(options: {
                     y,
                     visible: true,
                     setOrigin: vi.fn(),
+                    setScale: vi.fn(),
                     setDepth: vi.fn(),
                     setVisible: vi.fn((v: boolean) => {
                         sprite.visible = v;
@@ -122,6 +125,7 @@ function createInteractableHarness(options: {
                     destroy: vi.fn(),
                 };
                 sprite.setOrigin.mockReturnValue(sprite);
+                sprite.setScale.mockReturnValue(sprite);
                 sprite.setDepth.mockReturnValue(sprite);
                 createdKeycardSprites.push(sprite);
                 return sprite;
@@ -210,6 +214,7 @@ function createInteractableHarness(options: {
                     y,
                     texture,
                     setOrigin: vi.fn(),
+                    setScale: vi.fn(),
                     setDepth: vi.fn(),
                     setTexture: vi.fn((next: string) => {
                         sprite.texture = next;
@@ -217,14 +222,15 @@ function createInteractableHarness(options: {
                     }),
                     refreshBody: vi.fn(),
                     getBounds: () => ({
-                        x: sprite.x - 16,
-                        y: sprite.y - 32,
-                        width: 32,
-                        height: 64,
+                        x: sprite.x - 32,
+                        y: sprite.y - 64,
+                        width: 64,
+                        height: 128,
                     }),
                     destroy: vi.fn(),
                 };
                 sprite.setOrigin.mockReturnValue(sprite);
+                sprite.setScale.mockReturnValue(sprite);
                 sprite.setDepth.mockReturnValue(sprite);
                 createdDoorSprites.push(sprite);
                 return sprite;
@@ -272,8 +278,9 @@ beforeEach(() => {
 });
 
 describe('Point-only Tiled parsing for keycards and doors', () => {
-    test('parses only Point objects and centers doors on the bottom tile (y - 16)', () => {
+    test('parses only Point objects and centers doors on the bottom tile (y - halfTileH)', () => {
         const mockMap = {
+            tileHeight: 64,
             objects: [
                 {
                     objects: [
@@ -281,17 +288,17 @@ describe('Point-only Tiled parsing for keycards and doors', () => {
                         { name: 'key', type: '', point: true, x: 112, y: 208, width: 0, height: 0 },
                         // Ignored rectangle key (points only)
                         { name: 'key', type: '', point: false, x: 200, y: 200, width: 32, height: 32 },
-                        // Valid point door (bottom-tile center at y=304 -> 32x64 door center at y=288)
+                        // Valid point door (bottom-tile center at y=304 -> 64x128 door center at y=272)
                         { name: 'door', type: '', point: true, x: 400, y: 304, width: 0, height: 0 },
                         // Ignored rectangle door (points only)
-                        { name: 'door', type: '', point: false, x: 500, y: 300, width: 32, height: 64 },
+                        { name: 'door', type: '', point: false, x: 500, y: 300, width: 64, height: 128 },
                     ],
                 },
             ],
         } as unknown as Phaser.Tilemaps.Tilemap;
 
         expect(findKeycardsFromObjects(mockMap)).toEqual([{ x: 112, y: 208 }]);
-        expect(findDoorsFromObjects(mockMap)).toEqual([{ x: 400, y: 288 }]);
+        expect(findDoorsFromObjects(mockMap)).toEqual([{ x: 400, y: 272 }]);
     });
 });
 
@@ -310,7 +317,7 @@ describe('Keycard pickup, hovering indicator, and locked door behavior', () => {
         expect(createdKeycardSprites[0].visible).toBe(false);
         expect(heldKeycardSprites).toHaveLength(1);
         expect(heldKeycardSprites[0].visible).toBe(true);
-        expect(heldKeycardSprites[0].setScale).not.toHaveBeenCalled();
+        expect(heldKeycardSprites[0].setScale).toHaveBeenCalledWith(2);
         // Steady position to the right side of the player (no hover bob)
         const yAfterFirstFrame = heldKeycardSprites[0].y;
         expect(heldKeycardSprites[0].x).toBeGreaterThan(player.x + 16);
@@ -318,52 +325,52 @@ describe('Keycard pickup, hovering indicator, and locked door behavior', () => {
         expect(heldKeycardSprites[0].y).toBe(yAfterFirstFrame);
     });
 
-        test('approaching a locked door with a key consumes the key, opens the door permanently, and resets cleanly', () => {
-            const {
-                game,
-                player,
-                createdKeycardSprites,
-                createdDoorSprites,
-                heldKeycardSprites,
-                colliderCallbacks,
-            } = createInteractableHarness({
-                playerPos: { x: 200, y: 300 },
-                keycards: [{ x: 100, y: 300 }],
-                doors: [{ x: 250, y: 288 }],
-            });
-
-            // Without key: collider blocks player (returns true), door stays closed even when close
-            expect(colliderCallbacks[0]()).toBe(true);
-            game.update(0, 16);
-            expect(createdDoorSprites[0].texture).toBe('door-closed');
-
-            // Walk over key to pick it up (far from door: dx = 150 > 80)
-            player.x = 100;
-            game.update(16, 16);
-            expect(player.hasKeycard).toBe(true);
-            expect(createdDoorSprites[0].texture).toBe('door-closed');
-            expect(colliderCallbacks[0]()).toBe(true);
-
-            // Approach door with key (dx = 50 <= 80) -> consumes key and opens door permanently
-            player.x = 200;
-            game.update(32, 16);
-            expect(player.hasKeycard).toBe(false);
-            expect(heldKeycardSprites[0].visible).toBe(false);
-            expect(createdDoorSprites[0].texture).toBe('door-open');
-            expect(colliderCallbacks[0]()).toBe(false);
-
-            // Pass through and move away from door (dx = 120 > 80) -> door stays permanently open
-            player.x = 370;
-            game.update(48, 16);
-            expect(createdDoorSprites[0].texture).toBe('door-open');
-            expect(colliderCallbacks[0]()).toBe(false);
-
-            // Level reset restores world key, hides held key, and closes door again
-            game['resetSceneState']();
-            expect(player.hasKeycard).toBe(false);
-            expect(createdKeycardSprites[0].visible).toBe(true);
-            expect(heldKeycardSprites[0].visible).toBe(false);
-            expect(createdDoorSprites[0].texture).toBe('door-closed');
-            expect(colliderCallbacks[0]()).toBe(true);
+    test('approaching a locked door with a key consumes the key, opens the door permanently, and resets cleanly', () => {
+        const {
+            game,
+            player,
+            createdKeycardSprites,
+            createdDoorSprites,
+            heldKeycardSprites,
+            colliderCallbacks,
+        } = createInteractableHarness({
+            playerPos: { x: 400, y: 300 },
+            keycards: [{ x: 100, y: 300 }],
+            doors: [{ x: 450, y: 288 }],
         });
+
+        // Without key: collider blocks player (returns true), door stays closed even when close
+        expect(colliderCallbacks[0]()).toBe(true);
+        game.update(0, 16);
+        expect(createdDoorSprites[0].texture).toBe('door-closed');
+
+        // Walk over key to pick it up (far from door: dx = 350 > 160)
+        player.x = 100;
+        game.update(16, 16);
+        expect(player.hasKeycard).toBe(true);
+        expect(createdDoorSprites[0].texture).toBe('door-closed');
+        expect(colliderCallbacks[0]()).toBe(true);
+
+        // Approach door with key (dx = 50 <= 160) -> consumes key and opens door permanently
+        player.x = 400;
+        game.update(32, 16);
+        expect(player.hasKeycard).toBe(false);
+        expect(heldKeycardSprites[0].visible).toBe(false);
+        expect(createdDoorSprites[0].texture).toBe('door-open');
+        expect(colliderCallbacks[0]()).toBe(false);
+
+        // Pass through and move away from door (dx = 250 > 160) -> door stays permanently open
+        player.x = 700;
+        game.update(48, 16);
+        expect(createdDoorSprites[0].texture).toBe('door-open');
+        expect(colliderCallbacks[0]()).toBe(false);
+
+        // Level reset restores world key, hides held key, and closes door again
+        game['resetSceneState']();
+        expect(player.hasKeycard).toBe(false);
+        expect(createdKeycardSprites[0].visible).toBe(true);
+        expect(heldKeycardSprites[0].visible).toBe(false);
+        expect(createdDoorSprites[0].texture).toBe('door-closed');
+        expect(colliderCallbacks[0]()).toBe(true);
     });
+});

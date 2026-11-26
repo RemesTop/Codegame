@@ -5,8 +5,8 @@ import { AUTO, Game, Types } from 'phaser';
 // https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config: Types.Core.GameConfig = {
     type: AUTO,
-    width: 1024,
-    height: 832,
+    width: 2048,
+    height: 1664,
     parent: 'game-container',
     backgroundColor: '#2ea9ef',
     roundPixels: true,
@@ -16,7 +16,7 @@ const config: Types.Core.GameConfig = {
         arcade: {
             gravity: {
                 x: 0,
-                y: 700,
+                y: 1400,
             },
         },
     },

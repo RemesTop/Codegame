@@ -9,8 +9,8 @@ export const UNITS_PER_TILE = 10;
 /**
  * Converts a Phaser world pixel measurement into player-facing units (1 tile = 10 units).
  */
-export function pixelsToUnits(pixels: number, tileSize: number = 32): number {
-    const safeTileSize = tileSize > 0 ? tileSize : 32;
+export function pixelsToUnits(pixels: number, tileSize: number = 64): number {
+    const safeTileSize = tileSize > 0 ? tileSize : 64;
     return (pixels / safeTileSize) * UNITS_PER_TILE;
 }
 
@@ -493,7 +493,7 @@ export class Raycaster {
             return hasDistanceLimit ? false : undefined;
         }
 
-        const tileSize = level.map.tileWidth || 32;
+        const tileSize = level.map.tileWidth || 64;
         const roundedDistance = Math.round(pixelsToUnits(hit.distance, tileSize));
 
         if (hasDistanceLimit) {
@@ -537,7 +537,7 @@ export class Raycaster {
 
         const gfx = this.scene.add.graphics();
         gfx.setDepth(15);
-        gfx.lineStyle(2, 0xffffff, 0.9);
+        gfx.lineStyle(4, 0xffffff, 0.9);
         gfx.lineBetween(startX, startY, endX, endY);
         this.activeVisuals.set(normalizedAngle, gfx);
 

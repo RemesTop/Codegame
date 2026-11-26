@@ -2,15 +2,15 @@ import level1Data from './Level-1.json';
 import level2Data from './Level-2.json';
 
 /**
- * Collision shape of a single tile within a 32x32 tileset.
+ * Collision shape of a single tile within a 64x64 tileset.
  * Any tile not listed in `tileShapes` defaults to `'solid'`.
- * - 'solid': Full 32x32 blocking tile (default).
+ * - 'solid': Full 64x64 blocking tile (default).
  * - 'none': Non-colliding pass-through tile.
  * - 'ramp-left': 45-degree floor slope facing left (rises from bottom-left to top-right).
  * - 'ramp-right': 45-degree floor slope facing right (falls from top-left to bottom-right).
  * - 'ceiling-ramp-left': 45-degree upside-down ceiling corner facing left (solid top-right, '\' underside).
  * - 'ceiling-ramp-right': 45-degree upside-down ceiling corner facing right (solid top-left, '/' underside).
- * - 'danger': Full 32x32 hazardous tile that kills the player on contact.
+ * - 'danger': Full 64x64 hazardous tile that kills the player on contact.
  */
 export type TileShape =
     | 'solid'
@@ -124,29 +124,16 @@ function update(){
 `;
 
 /**
- * Registry of all 32x32 tilesets available to levels.
+ * Registry of all 64x64 tilesets available to levels.
  * Add new tilesets here when expanding the game with additional tile art.
  */
 export const TILESETS: Record<string, TilesetConfig> = {
-    Tileset1: {
-        name: 'Tileset1',
-        textureKey: 'Tileset1',
-        imagePath: 'tiles/Tileset1.png',
-        tileWidth: 32,
-        tileHeight: 32,
-        margin: 0,
-        spacing: 0,
-        tileShapes: {
-            2: 'ramp-left',
-            3: 'ramp-right',
-        },
-    },
-    TilesetV0: {
-        name: 'TilesetV0',
-        textureKey: 'TilesetV0',
-        imagePath: 'tiles/TilesetV0.png',
-        tileWidth: 32,
-        tileHeight: 32,
+    TilesetV1: {
+        name: 'TilesetV1',
+        textureKey: 'TilesetV1',
+        imagePath: 'tiles/TilesetV1.png',
+        tileWidth: 64,
+        tileHeight: 64,
         margin: 0,
         spacing: 0,
         tileShapes: {
@@ -154,7 +141,7 @@ export const TILESETS: Record<string, TilesetConfig> = {
             22: 'ramp-left',
             30: 'ceiling-ramp-left',
             31: 'ceiling-ramp-right',
-            36: 'danger',
+            44: 'danger',
         },
     },
 };
@@ -169,8 +156,8 @@ export const LEVELS: LevelDefinition[] = [
         name: 'Level 1',
         mapData: level1Data as TiledMapJson,
         spawn: {
-            x: 544,
-            y: 384,
+            x: 1088,
+            y: 768,
         },
         starterCode: LEVEL_1_STARTER_CODE,
     },
@@ -179,8 +166,8 @@ export const LEVELS: LevelDefinition[] = [
         name: 'Level 2',
         mapData: level2Data as TiledMapJson,
         spawn: {
-            x: 27,
-            y: 907,
+            x: 352,
+            y: 1120,
         },
         starterCode: LEVEL_2_STARTER_CODE,
     },

@@ -32,8 +32,8 @@ export const DEFAULT_PARALLAX_CONFIG: ParallaxConfig = {
     skyFactorY: 0.1,
     cityFactorX: 0.45,
     cityFactorY: 0.3,
-    maxSkyTravelY: 260,
-    maxCityTravelY: 220,
+    maxSkyTravelY: 520,
+    maxCityTravelY: 440,
     skyAlpha: 0.85,
     skyBlurStrength: 0.5,
     cityAlpha: 1,
@@ -54,8 +54,13 @@ export class ParallaxBackground {
     private config: ParallaxConfig;
     private skyLayer: Phaser.GameObjects.TileSprite | null = null;
     private cityLayer: Phaser.GameObjects.TileSprite | null = null;
+    private skySourceWidth: number = 1024;
     private skySourceHeight: number = 768;
+    private citySourceWidth: number = 1024;
     private citySourceHeight: number = 768;
+    private skyScaleX: number = 1;
+    private cityScaleX: number = 1;
+    private cityDisplayHeight: number = 768;
     private skyTravelY: number = 0;
     private cityTravelY: number = 0;
 
@@ -67,8 +72,8 @@ export class ParallaxBackground {
             return;
         }
 
-        const viewWidth = scene.scale?.width || 1024;
-        const viewHeight = scene.scale?.height || 832;
+        const viewWidth = scene.scale?.width || 2048;
+        const viewHeight = scene.scale?.height || 1664;
 
         this.skyLayer = scene.add
             .tileSprite(0, 0, viewWidth, viewHeight, this.config.skyTextureKey)
@@ -79,6 +84,7 @@ export class ParallaxBackground {
 
         this.applyLayerBlur(this.skyLayer, this.config.skyBlurStrength);
 
+        this.skySourceWidth = this.skyLayer.frame?.width || 1024;
         this.skySourceHeight = this.skyLayer.frame?.height || 768;
 
         this.cityLayer = scene.add
@@ -90,8 +96,8 @@ export class ParallaxBackground {
 
         this.applyLayerBlur(this.cityLayer, this.config.cityBlurStrength);
 
+        this.citySourceWidth = this.cityLayer.frame?.width || 1024;
         this.citySourceHeight = this.cityLayer.frame?.height || 768;
-        this.cityLayer.setSize(viewWidth, this.citySourceHeight);
 
         this.configureForCamera();
     }
@@ -113,8 +119,8 @@ export class ParallaxBackground {
     public configureForCamera(): void {
         if (!this.skyLayer || !this.cityLayer) return;
 
-        const viewWidth = this.scene.scale?.width || 1024;
-        const viewHeight = this.scene.scale?.height || 832;
+        const viewWidth = this.scene.scale?.width || 2048;
+        const viewHeight = this.scene.scale?.height || 1664;
         const { scrollRangeY } = this.getScrollBounds();
 
         this.skyTravelY = Math.min(
@@ -126,12 +132,15 @@ export class ParallaxBackground {
             this.config.maxCityTravelY
         );
 
+        this.skyScaleX = viewWidth / this.skySourceWidth;
         const skyHeight = viewHeight + this.skyTravelY;
         this.skyLayer.setSize(viewWidth, skyHeight);
-        this.skyLayer.setTileScale(1, skyHeight / this.skySourceHeight);
+        this.skyLayer.setTileScale(this.skyScaleX, skyHeight / this.skySourceHeight);
 
-        this.cityLayer.setSize(viewWidth, this.citySourceHeight);
-        this.cityLayer.setTileScale(1, 1);
+        this.cityScaleX = viewWidth / this.citySourceWidth;
+        this.cityDisplayHeight = Math.round(this.citySourceHeight * this.cityScaleX);
+        this.cityLayer.setSize(viewWidth, this.cityDisplayHeight);
+        this.cityLayer.setTileScale(this.cityScaleX, this.cityScaleX);
 
         this.update();
     }
@@ -146,16 +155,18 @@ export class ParallaxBackground {
         const cam = this.scene.cameras?.main;
         if (!cam) return;
 
-        const viewHeight = this.scene.scale?.height || 832;
+        const viewHeight = this.scene.scale?.height || 1664;
         const { minScrollX, maxScrollX, minScrollY, scrollRangeY } = this.getScrollBounds();
 
         // Clamp camera scroll so transient unclamped values (e.g. right after centerOn)
         // never cause a 1-frame background jump/flicker
         const clampedScrollX = Phaser.Math.Clamp(cam.scrollX, minScrollX, maxScrollX);
 
-        // Horizontal parallax: seamless repeating via TileSprite tilePositionX
-        this.skyLayer.tilePositionX = clampedScrollX * this.config.skyFactorX;
-        this.cityLayer.tilePositionX = clampedScrollX * this.config.cityFactorX;
+        // Horizontal parallax: seamless repeating via TileSprite tilePositionX (in texture pixels)
+        this.skyLayer.tilePositionX =
+            (clampedScrollX / this.skyScaleX) * this.config.skyFactorX;
+        this.cityLayer.tilePositionX =
+            (clampedScrollX / this.cityScaleX) * this.config.cityFactorX;
 
         // Vertical parallax: smooth bounded vertical shift (no vertical wrapping)
         const tY =
@@ -165,7 +176,7 @@ export class ParallaxBackground {
 
         this.skyLayer.y = tY === 0 ? 0 : -tY * this.skyTravelY;
         this.cityLayer.y =
-            viewHeight - this.citySourceHeight + (1 - tY) * this.cityTravelY;
+            viewHeight - this.cityDisplayHeight + (1 - tY) * this.cityTravelY;
     }
 
     private getScrollBounds(): {
