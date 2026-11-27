@@ -75,6 +75,7 @@ export class Game extends Phaser.Scene {
         this.load.image('door-closed', 'Locked-door-1.png');
         this.load.image('door-open', 'Locked-door-2.png');
         this.load.image('goal-teleport', 'teleport1.png');
+        Player.preload(this);
         LevelLoader.preload(this);
     }
 
