@@ -712,29 +712,38 @@ export class Game extends Phaser.Scene {
 
         const right = left + width;
         const bottom = top + height;
-        // Include a 1px strip below the player's feet so danger tiles embedded
-        // flush in a solid floor (where bottom === tileTop) are detected when walked over.
-        const footContactEpsilon = 0.5;
+        // Extend hitbox slightly above the tile so walking over flush ground danger
+        // tiles kills the player, while insetting the sides and bottom so danger tiles
+        // placed on diagonal ramp corners cannot clip through and kill from underneath.
+        const topExtend = 2;
+        const sideInset = 6;
+        const bottomInset = 6;
 
         for (const layer of this.currentLevel.collidingLayers) {
-            const tiles = layer.getTilesWithinWorldXY(left, top, width, height + 1, {
-                isNotEmpty: true,
-            });
+            const tiles = layer.getTilesWithinWorldXY(
+                left,
+                top,
+                width,
+                height + topExtend,
+                {
+                    isNotEmpty: true,
+                }
+            );
 
             for (const tile of tiles) {
                 if (!this.currentLevel.dangerGids.has(tile.index)) {
                     continue;
                 }
 
-                const tileLeft = tile.getLeft();
-                const tileRight = tile.getRight();
-                const tileTop = tile.getTop();
-                const tileBottom = tile.getBottom();
+                const tileLeft = tile.getLeft() + sideInset;
+                const tileRight = tile.getRight() - sideInset;
+                const tileTop = tile.getTop() - topExtend;
+                const tileBottom = tile.getBottom() - bottomInset;
 
                 if (
                     right > tileLeft &&
                     left < tileRight &&
-                    bottom + footContactEpsilon >= tileTop &&
+                    bottom > tileTop &&
                     top < tileBottom
                 ) {
                     return true;

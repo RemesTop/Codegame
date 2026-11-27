@@ -187,9 +187,11 @@ export class TilemapCollider {
                         ceilY = tileBottom - t * tileHeight;
                     }
 
+                    // Only consider this tile's sloped underside when the player's head
+                    // was at or below the tile's top edge (not walking on top of a ramp bridge above it).
+                    const maxHorizontalStep = Math.abs(body.deltaX()) + 4;
                     if (
-                        body.velocity.y <= 0 &&
-                        prevTop >= tileTop - 4 &&
+                        prevTop >= tileTop - maxHorizontalStep &&
                         body.position.y < ceilY &&
                         body.bottom > ceilY
                     ) {
@@ -285,15 +287,44 @@ export class TilemapCollider {
         }
 
         if (bestCeilingY !== null) {
-            body.position.y = bestCeilingY;
-            body.updateCenter();
-            if (body.velocity.y < 0) {
-                body.velocity.y = 0;
+            if (prevTop >= bestCeilingY) {
+                // Player moved upward into the ceiling slope from below:
+                // stop upward motion at bestCeilingY (always <= prevTop, so it can
+                // never push the player downward through a floor below).
+                body.position.y = bestCeilingY;
+                body.updateCenter();
+                if (body.velocity.y < 0) {
+                    body.velocity.y = 0;
+                }
+                body.blocked.up = true;
+                body.blocked.none = false;
+                body.touching.up = true;
+                body.touching.none = false;
+            } else {
+                // Player moved sideways into a sloping ceiling lower than prevTop:
+                // never push Y downward (which would shove the player through solid
+                // ground tiles); block horizontal motion instead and stop any upward rise.
+                const movedRight = body.position.x > prevLeft;
+                body.position.x = prevLeft;
+                if (body.position.y < prevTop) {
+                    body.position.y = prevTop;
+                    if (body.velocity.y < 0) {
+                        body.velocity.y = 0;
+                    }
+                    body.blocked.up = true;
+                    body.touching.up = true;
+                }
+                body.updateCenter();
+                if (movedRight && body.velocity.x > 0) {
+                    body.velocity.x = 0;
+                    body.blocked.right = true;
+                    body.blocked.none = false;
+                } else if (!movedRight && body.velocity.x < 0) {
+                    body.velocity.x = 0;
+                    body.blocked.left = true;
+                    body.blocked.none = false;
+                }
             }
-            body.blocked.up = true;
-            body.blocked.none = false;
-            body.touching.up = true;
-            body.touching.none = false;
         }
     }
 }

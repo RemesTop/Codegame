@@ -23,6 +23,7 @@ interface CharacterRig {
     frontForearm: Phaser.GameObjects.Container;
     backArm: Phaser.GameObjects.Container;
     backForearm: Phaser.GameObjects.Container;
+    handKeycard: Phaser.GameObjects.Image | null;
 }
 
 const PLAYER_HITBOX_WIDTH = 62;
@@ -59,9 +60,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     private spawnY: number;
 
     // Horizontal Kinematics (isolated on X-axis so Y-axis gravity remains independent)
-    private readonly maxSpeedX: number = 480; // Max horizontal speed (pixels/sec, 7.5 tiles/sec)
-    private readonly accelerationX: number = 1300; // Horizontal acceleration (pixels/sec^2)
-    private readonly decelerationX: number = 1500; // Horizontal braking/friction (pixels/sec^2)
+    private readonly maxSpeedX: number = 400; // Max horizontal speed (pixels/sec, ~6 tiles/sec)
+    private readonly accelerationX: number = 1150; // Horizontal acceleration (pixels/sec^2)
+    private readonly decelerationX: number = 2400; // Horizontal braking/friction (pixels/sec^2)
     private readonly jumpVelocityY: number = 800; // Upward jump impulse (pixels/sec)
 
     // Sleep indicator ("z" particle) state
@@ -201,9 +202,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         const core = add.image(0, -54, 'player-core').setOrigin(0.5, 0.5);
         const head = add.image(2, -66, 'player-head').setOrigin(0.5, 0.88);
 
-        // 4. Front arm (forearm behind upper-arm elbow cap so the joint stays seamless)
+        // 4. Front arm (forearm behind upper-arm elbow cap; keycard gripped inside claw behind pincers)
+        let handKeycard: Phaser.GameObjects.Image | null = null;
+        const forearmChildren: Phaser.GameObjects.GameObject[] = [];
+        if (this.scene.textures?.exists?.('keycard')) {
+            handKeycard = add
+                .image(15, 18, 'keycard')
+                .setOrigin(0.22, 0.5)
+                .setScale(0.55)
+                .setRotation(0.25)
+                .setVisible(false);
+            forearmChildren.push(handKeycard);
+        }
         const arm1Low = add.image(0, 0, 'player-arm1-low').setOrigin(0.22, 0.2);
-        const frontForearm = add.container(-9, 14, [arm1Low]);
+        forearmChildren.push(arm1Low);
+        const frontForearm = add.container(-9, 14, forearmChildren);
         const arm1High = add.image(0, 0, 'player-arm1-high').setOrigin(0.75, 0.2);
         const frontArm = add.container(-10, -54, [frontForearm, arm1High]);
 
@@ -225,6 +238,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             frontForearm,
             backArm,
             backForearm,
+            handKeycard,
         };
     }
 
@@ -293,9 +307,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             bodyBobY = -Math.abs(Math.sin(this.walkPhase)) * 3 * speedRatio;
             blendRate = 16;
         } else {
-            // Idle: no breathing bob; smoothly relax arms down along the sides
-            targetFrontArm = IDLE_FRONT_ARM_ROT;
-            targetFrontForearm = IDLE_FRONT_FOREARM_ROT;
+            // Idle: no breathing bob; smoothly relax arms down (hold front arm slightly up if carrying a keycard)
+            targetFrontArm = this.hasKeycard ? -0.42 : IDLE_FRONT_ARM_ROT;
+            targetFrontForearm = this.hasKeycard ? 0.08 : IDLE_FRONT_FOREARM_ROT;
             targetBackArm = IDLE_BACK_ARM_ROT;
             targetBackForearm = IDLE_BACK_FOREARM_ROT;
             blendRate = 7;
@@ -370,6 +384,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     public setHasKeycard(hasKeycard: boolean): void {
         this.hasKeycard = hasKeycard;
+        if (this.rig?.handKeycard) {
+            this.rig.handKeycard.setVisible(hasKeycard);
+            return;
+        }
+
         if (hasKeycard) {
             if (!this.heldKeycardSprite && this.scene?.add?.image) {
                 this.heldKeycardSprite = this.scene.add
