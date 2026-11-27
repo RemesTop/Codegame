@@ -25,6 +25,16 @@ interface CharacterRig {
     backForearm: Phaser.GameObjects.Container;
 }
 
+const PLAYER_HITBOX_WIDTH = 62;
+const PLAYER_HITBOX_HEIGHT = 112;
+const PLAYER_RIG_GROUND_OFFSET_Y = 4;
+
+// Relaxed idle arm angles (elbows drop beneath shoulders, forearms hang down)
+const IDLE_FRONT_ARM_ROT = -0.32;
+const IDLE_FRONT_FOREARM_ROT = 0.62;
+const IDLE_BACK_ARM_ROT = -0.28;
+const IDLE_BACK_FOREARM_ROT = 0.56;
+
 const PLAYER_PART_TEXTURES: ReadonlyArray<{ key: string; path: string }> = [
     { key: 'player-head', path: 'Player/character_head.png' },
     { key: 'player-core', path: 'Player/character_core.png' },
@@ -68,10 +78,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Cutout character rig & procedural animation state
     private rig: CharacterRig | null = null;
-    private readonly rigScale: number = 0.82;
+    private readonly rigScale: number = 0.96; // ~117px tall (bigger, still under 2 tiles / 128px)
     private facing: 1 | -1 = 1;
     private walkPhase: number = 0;
-    private idlePhase: number = 0;
 
     /**
      * Preloads all individual body-part PNGs for the player cutout rig.
@@ -92,17 +101,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             typeof scene.add?.container === 'function';
         const baseTexture = useRig ? 'player-hitbox' : texture;
 
-        // Generate an invisible 64x96 hitbox texture when the rig is active,
+        // Generate an invisible 62x112 hitbox texture when the rig is active,
         // or a visible fallback box if body-part textures are not loaded.
         if (!scene.textures.exists(baseTexture)) {
             const gfx = scene.make.graphics({ x: 0, y: 0 });
             if (!useRig) {
                 gfx.fillStyle(0x000000, 1);
-                gfx.fillRect(0, 0, 64, 96);
+                gfx.fillRect(0, 0, PLAYER_HITBOX_WIDTH, PLAYER_HITBOX_HEIGHT);
                 gfx.lineStyle(4, 0xffffff, 1);
-                gfx.strokeRect(0, 0, 64, 96);
+                gfx.strokeRect(0, 0, PLAYER_HITBOX_WIDTH, PLAYER_HITBOX_HEIGHT);
             }
-            gfx.generateTexture(baseTexture, 64, 96);
+            gfx.generateTexture(baseTexture, PLAYER_HITBOX_WIDTH, PLAYER_HITBOX_HEIGHT);
             gfx.destroy();
         }
 
@@ -113,6 +122,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
         scene.add.existing(this);
         scene.physics.add.existing(this);
+
+        const body = this.body as Phaser.Physics.Arcade.Body | null;
+        if (body && typeof body.setSize === 'function') {
+            body.setSize(PLAYER_HITBOX_WIDTH, PLAYER_HITBOX_HEIGHT, true);
+        }
 
         // Keep side walls solid but allow falling off the bottom of the screen
         scene.physics.world.setBoundsCollision(true, true, true, false);
@@ -126,6 +140,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
         if (useRig) {
             this.buildCharacterRig();
+            this.resetRigPose();
             this.ensurePostUpdateBound();
             this.syncAttachments();
         }
@@ -192,14 +207,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         const arm1High = add.image(0, 0, 'player-arm1-high').setOrigin(0.75, 0.2);
         const frontArm = add.container(-10, -54, [frontForearm, arm1High]);
 
-        const root = add.container(Math.round(this.x), Math.round(this.y + 48), [
-            backArm,
-            legBack,
-            legFront,
-            core,
-            head,
-            frontArm,
-        ]);
+        const root = add.container(
+            Math.round(this.x),
+            Math.round(this.y + PLAYER_HITBOX_HEIGHT / 2 + PLAYER_RIG_GROUND_OFFSET_Y),
+            [backArm, legBack, legFront, core, head, frontArm]
+        );
         root.setScale(this.rigScale, this.rigScale);
         root.setDepth(this.depth ?? 10);
 
@@ -231,10 +243,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         const onFloor =
             body && typeof body.onFloor === 'function' ? body.onFloor() : true;
         const vy = body?.velocity?.y ?? 0;
+        const isAirborne = !onFloor || vy < -40;
         const speedRatio = Math.min(1, Math.abs(currentVx) / this.maxSpeedX);
 
-        this.idlePhase = (this.idlePhase ?? 0) + dt * 2.6;
-        if (onFloor && speedRatio > 0.02) {
+        if (!isAirborne && speedRatio > 0.02) {
             this.walkPhase = (this.walkPhase ?? 0) + dt * (4 + speedRatio * 10);
         }
 
@@ -246,51 +258,50 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         let targetBackForearm = 0;
         let targetCoreRot = 0;
         let targetHeadRot = 0;
-        let bodyBobY = Math.sin(this.idlePhase) * 1.2;
+        let bodyBobY = 0;
+        let blendRate = 14;
 
-        if (!onFloor) {
-            // Airborne jump / fall pose blended by vertical velocity
-            const airT = Math.max(-1, Math.min(1, vy / 600));
-            if (airT < 0) {
-                const rise = -airT;
-                targetLegFront = -0.35 * rise;
-                targetLegBack = 0.3 * rise;
-                targetFrontArm = -0.45 * rise;
-                targetFrontForearm = -0.2 * rise;
-                targetBackArm = 0.25 * rise;
-                targetHeadRot = -0.06 * rise;
-            } else {
-                targetLegFront = -0.18 * airT;
-                targetLegBack = 0.24 * airT;
-                targetFrontArm = 0.32 * airT;
-                targetFrontForearm = -0.15 * airT;
-                targetBackArm = -0.28 * airT;
-                targetHeadRot = 0.05 * airT;
-            }
-            targetCoreRot = speedRatio * 0.05;
-            bodyBobY = 0;
+        if (isAirborne) {
+            // Smoothly transition across the jump arc from upward launch (fallBlend=0)
+            // through apex (fallBlend~0.33) to downward fall (fallBlend=1) without
+            // ever collapsing back to a flat standing pose at vy=0.
+            const fallBlend = Math.max(0, Math.min(1, (vy + 200) / 600));
+            const mix = (riseVal: number, fallVal: number) =>
+                riseVal + (fallVal - riseVal) * fallBlend;
+
+            targetLegFront = mix(-0.68, -0.42);
+            targetLegBack = mix(0.58, 0.52);
+            targetFrontArm = mix(-1.25, 0.55);
+            targetFrontForearm = mix(-0.85, -0.85);
+            targetBackArm = mix(0.55, -1.2);
+            targetBackForearm = mix(-0.6, -0.7);
+            targetCoreRot = mix(-0.06, 0.05);
+            targetHeadRot = mix(-0.14, 0.08);
+            bodyBobY = mix(-3, -1);
+            blendRate = 22;
         } else if (speedRatio > 0.02) {
             // Contralateral run stride
             const stride = Math.sin(this.walkPhase) * speedRatio;
-            targetLegFront = stride * 0.55;
-            targetLegBack = -stride * 0.55;
-            targetFrontArm = -stride * 0.5;
-            targetFrontForearm = Math.max(0, -stride) * -0.25;
-            targetBackArm = stride * 0.5;
-            targetBackForearm = Math.max(0, stride) * -0.25;
+            targetLegFront = stride * 0.58;
+            targetLegBack = -stride * 0.58;
+            targetFrontArm = -stride * 0.55;
+            targetFrontForearm = Math.max(0, -stride) * -0.28;
+            targetBackArm = stride * 0.55;
+            targetBackForearm = Math.max(0, stride) * -0.28;
             targetCoreRot = speedRatio * 0.06;
-            targetHeadRot =
-                speedRatio * 0.04 + Math.sin(this.walkPhase * 2) * 0.02 * speedRatio;
+            targetHeadRot = speedRatio * 0.04;
             bodyBobY = -Math.abs(Math.sin(this.walkPhase)) * 3 * speedRatio;
+            blendRate = 16;
         } else {
-            // Subtle idle breathing relaxation on forearms
-            const breath = Math.sin(this.idlePhase);
-            targetFrontArm = breath * 0.03;
-            targetBackArm = -breath * 0.03;
-            targetHeadRot = breath * 0.015;
+            // Idle: no breathing bob; smoothly relax arms down along the sides
+            targetFrontArm = IDLE_FRONT_ARM_ROT;
+            targetFrontForearm = IDLE_FRONT_FOREARM_ROT;
+            targetBackArm = IDLE_BACK_ARM_ROT;
+            targetBackForearm = IDLE_BACK_FOREARM_ROT;
+            blendRate = 7;
         }
 
-        const blend = Math.min(1, 1 - Math.exp(-14 * dt));
+        const blend = Math.min(1, 1 - Math.exp(-blendRate * dt));
         const lerp = (cur: number, target: number) => cur + (target - cur) * blend;
 
         this.rig.legFront.rotation = lerp(this.rig.legFront.rotation, targetLegFront);
@@ -318,10 +329,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         if (!this.rig) return;
         this.rig.legFront.rotation = 0;
         this.rig.legBack.rotation = 0;
-        this.rig.frontArm.rotation = 0;
-        this.rig.frontForearm.rotation = 0;
-        this.rig.backArm.rotation = 0;
-        this.rig.backForearm.rotation = 0;
+        this.rig.frontArm.rotation = IDLE_FRONT_ARM_ROT;
+        this.rig.frontForearm.rotation = IDLE_FRONT_FOREARM_ROT;
+        this.rig.backArm.rotation = IDLE_BACK_ARM_ROT;
+        this.rig.backForearm.rotation = IDLE_BACK_FOREARM_ROT;
         this.rig.core.rotation = 0;
         this.rig.head.rotation = 0;
         this.rig.core.y = -54;
@@ -343,10 +354,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             const body = this.body as Phaser.Physics.Arcade.Body | null;
             const bottomY = body
                 ? body.position.y + body.height
-                : this.y + (this.displayHeight || this.height || 96) / 2;
+                : this.y + (this.displayHeight || this.height || PLAYER_HITBOX_HEIGHT) / 2;
             const facing = this.facing ?? 1;
-            const scale = this.rigScale ?? 0.82;
-            this.rig.root.setPosition(Math.round(this.x), Math.round(bottomY));
+            const scale = this.rigScale ?? 0.96;
+            this.rig.root.setPosition(
+                Math.round(this.x),
+                Math.round(bottomY + PLAYER_RIG_GROUND_OFFSET_Y)
+            );
             this.rig.root.setScale(facing * scale, scale);
             this.rig.root.setDepth(this.depth ?? 10);
             this.rig.root.setAlpha(this.alpha ?? 1);
@@ -513,7 +527,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.movementState = 'STOP';
         this.facing = 1;
         this.walkPhase = 0;
-        this.idlePhase = 0;
         this.resetRigPose();
         this.isSleeping = false;
         this.sleepParticleCooldownMs = 0;

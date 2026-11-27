@@ -185,7 +185,27 @@ test('Player.preload loads all 8 character part textures and rig animates/flips 
 
   const player = new Player(mockScene as never, 200, 300);
   const rootContainer = mockContainers[mockContainers.length - 1];
-  expect(rootContainer.scaleX).toBeGreaterThan(0);
+  expect(rootContainer.scaleX).toBeCloseTo(0.96);
+
+  // Idle: torso does not bob/breathe and arms stay relaxed
+  const coreImg = (rootContainer.children[3] as { y: number });
+  const frontArm = (rootContainer.children[5] as { rotation: number });
+  const initialCoreY = coreImg.y;
+  expect(frontArm.rotation).toBeLessThan(-0.2);
+  player.update(250);
+  expect(coreImg.y).toBe(initialCoreY);
+
+  // Jump / airborne (even at apex vy = 0 when off the floor) strikes a distinct jump pose
+  const legFront = (rootContainer.children[2] as { rotation: number });
+  const body = player.body as unknown as {
+    onFloor: () => boolean;
+    velocity: { x: number; y: number };
+  };
+  body.onFloor = () => false;
+  body.velocity.y = 0;
+  player.update(100);
+  expect(Math.abs(legFront.rotation)).toBeGreaterThan(0.3);
+  body.onFloor = () => true;
 
   // Move left -> rig flips horizontally (negative scaleX)
   player.moveLeft();
