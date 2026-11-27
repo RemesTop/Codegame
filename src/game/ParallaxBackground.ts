@@ -34,8 +34,8 @@ export const DEFAULT_PARALLAX_CONFIG: ParallaxConfig = {
     cityFactorY: 0.3,
     maxSkyTravelY: 520,
     maxCityTravelY: 440,
-    skyAlpha: 0.85,
-    skyBlurStrength: 0.5,
+    skyAlpha: 1,
+    skyBlurStrength: 0,
     cityAlpha: 1,
     cityBlurStrength: 0.3,
 };
@@ -130,11 +130,16 @@ export class ParallaxBackground {
             this.config.maxCityTravelY
         );
 
-        this.skyScaleX = viewWidth / this.skySourceWidth;
         const skyHeight = viewHeight + this.skyTravelY;
+        // Scale uniformly so non-square/widescreen sky textures (e.g. 1280x720) keep their aspect ratio
+        const skyScale = Math.max(
+            viewWidth / this.skySourceWidth,
+            skyHeight / this.skySourceHeight
+        );
+        this.skyScaleX = skyScale;
         this.skyLayer.x = offsetX;
         this.skyLayer.setSize(viewWidth, skyHeight);
-        this.skyLayer.setTileScale(this.skyScaleX, skyHeight / this.skySourceHeight);
+        this.skyLayer.setTileScale(skyScale, skyScale);
 
         this.cityScaleX = viewWidth / this.citySourceWidth;
         this.cityDisplayHeight = Math.round(this.citySourceHeight * this.cityScaleX);
