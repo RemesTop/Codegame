@@ -317,7 +317,8 @@ describe('Keycard pickup, hovering indicator, and locked door behavior', () => {
         expect(createdKeycardSprites[0].visible).toBe(false);
         expect(heldKeycardSprites).toHaveLength(1);
         expect(heldKeycardSprites[0].visible).toBe(true);
-        expect(heldKeycardSprites[0].setScale).toHaveBeenCalledWith(2);
+        expect(createdKeycardSprites[0].setScale).not.toHaveBeenCalled();
+        expect(heldKeycardSprites[0].setScale).not.toHaveBeenCalled();
         // Steady position to the right side of the player (no hover bob)
         const yAfterFirstFrame = heldKeycardSprites[0].y;
         expect(heldKeycardSprites[0].x).toBeGreaterThan(player.x + 16);

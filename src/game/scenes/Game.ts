@@ -513,7 +513,6 @@ export class Game extends Phaser.Scene {
             const sprite = this.add
                 .image(kc.x, kc.y, 'keycard')
                 .setOrigin(0.5, 0.5)
-                .setScale(2)
                 .setDepth(6);
             this.keycardEntities.push({
                 sprite,
@@ -526,7 +525,6 @@ export class Game extends Phaser.Scene {
             const sprite = this.physics.add
                 .staticImage(door.x, door.y, 'door-closed')
                 .setOrigin(0.5, 0.5)
-                .setScale(2)
                 .setDepth(4);
             sprite.refreshBody();
 

@@ -114,7 +114,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
                 this.heldKeycardSprite = this.scene.add
                     .image(Math.round(this.x), Math.round(this.y), 'keycard')
                     .setOrigin(0.5, 0.5)
-                    .setScale(2)
                     .setDepth((this.depth ?? 10) + 1);
             }
             if (!this.postUpdateBound && this.scene?.events?.on) {
