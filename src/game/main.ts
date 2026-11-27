@@ -5,11 +5,15 @@ import { AUTO, Game, Types } from 'phaser';
 // https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config: Types.Core.GameConfig = {
     type: AUTO,
-    width: 2048,
-    height: 1664,
+    width: 1024,
+    height: 832,
     parent: 'game-container',
     backgroundColor: '#2ea9ef',
     roundPixels: true,
+    render: {
+        antialias: true,
+        mipmapFilter: 'LINEAR_MIPMAP_LINEAR',
+    },
     scene: [MainGame],
     physics: {
         default: 'arcade',

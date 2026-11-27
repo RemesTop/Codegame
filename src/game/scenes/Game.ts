@@ -79,6 +79,9 @@ export class Game extends Phaser.Scene {
     }
 
     create() {
+        // Render 64x64 tiles at 0.5x zoom on a 1024x832 canvas for crisp 1:1 screen resolution
+        this.cameras.main?.setZoom?.(0.5);
+
         // 2-layer parallax background (far starry sky underneath, city skyline on top)
         this.parallaxBg = new ParallaxBackground(this);
 
@@ -216,10 +219,16 @@ export class Game extends Phaser.Scene {
         }
 
         const bounds = cam.getBounds();
-        const minScrollX = bounds.x;
-        const maxScrollX = Math.max(bounds.x, bounds.right - cam.width);
-        const minScrollY = bounds.y;
-        const maxScrollY = Math.max(bounds.y, bounds.bottom - cam.height);
+        const zoom = cam.zoom || 1;
+        const halfW = cam.width * 0.5;
+        const halfH = cam.height * 0.5;
+        const displayHalfW = (cam.width / zoom) * 0.5;
+        const displayHalfH = (cam.height / zoom) * 0.5;
+
+        const minScrollX = bounds.x - halfW + displayHalfW;
+        const maxScrollX = Math.max(minScrollX, bounds.right - halfW - displayHalfW);
+        const minScrollY = bounds.y - halfH + displayHalfH;
+        const maxScrollY = Math.max(minScrollY, bounds.bottom - halfH - displayHalfH);
 
         const scrollRangeX = maxScrollX - minScrollX;
         const scrollRangeY = maxScrollY - minScrollY;
@@ -238,7 +247,7 @@ export class Game extends Phaser.Scene {
 
         if (isHorizontal) {
             const targetY = Phaser.Math.Clamp(
-                spawn.y - cam.height / 2,
+                spawn.y - halfH,
                 minScrollY,
                 maxScrollY
             );
@@ -257,7 +266,7 @@ export class Game extends Phaser.Scene {
             });
         } else {
             const targetX = Phaser.Math.Clamp(
-                spawn.x - cam.width / 2,
+                spawn.x - halfW,
                 minScrollX,
                 maxScrollX
             );
@@ -305,13 +314,16 @@ export class Game extends Phaser.Scene {
                 this.cancelIntroPan();
 
                 const cam = this.cameras.main;
-                const bounds = cam.getBounds();
-                const canScrollY = bounds.height > cam.height;
-                const canScrollX = bounds.width > cam.width;
-
                 const wheelScale = 1;
-                const scaledX = deltaX * wheelScale;
-                const scaledY = deltaY * wheelScale;
+                const zoom = cam.zoom || 1;
+                const scaledX = (deltaX * wheelScale) / zoom;
+                const scaledY = (deltaY * wheelScale) / zoom;
+
+                const bounds = cam.getBounds();
+                const displayWidth = cam.width / zoom;
+                const displayHeight = cam.height / zoom;
+                const canScrollY = bounds.height > displayHeight;
+                const canScrollX = bounds.width > displayWidth;
 
                 if (canScrollY) {
                     this.scrollCameraBy(scaledX, scaledY);
@@ -341,8 +353,9 @@ export class Game extends Phaser.Scene {
                 isDragging = false;
                 return;
             }
-            const dx = lastPointerX - pointer.x;
-            const dy = lastPointerY - pointer.y;
+            const zoom = this.cameras.main.zoom || 1;
+            const dx = (lastPointerX - pointer.x) / zoom;
+            const dy = (lastPointerY - pointer.y) / zoom;
             lastPointerX = pointer.x;
             lastPointerY = pointer.y;
             this.scrollCameraBy(dx, dy);
@@ -396,11 +409,19 @@ export class Game extends Phaser.Scene {
     private scrollCameraBy(dx: number, dy: number): void {
         const cam = this.cameras.main;
         const bounds = cam.getBounds();
-        const maxScrollX = Math.max(bounds.x, bounds.right - cam.width);
-        const maxScrollY = Math.max(bounds.y, bounds.bottom - cam.height);
+        const zoom = cam.zoom || 1;
+        const halfW = cam.width * 0.5;
+        const halfH = cam.height * 0.5;
+        const displayHalfW = (cam.width / zoom) * 0.5;
+        const displayHalfH = (cam.height / zoom) * 0.5;
 
-        cam.scrollX = Phaser.Math.Clamp(cam.scrollX + dx, bounds.x, maxScrollX);
-        cam.scrollY = Phaser.Math.Clamp(cam.scrollY + dy, bounds.y, maxScrollY);
+        const minScrollX = bounds.x - halfW + displayHalfW;
+        const maxScrollX = Math.max(minScrollX, bounds.right - halfW - displayHalfW);
+        const minScrollY = bounds.y - halfH + displayHalfH;
+        const maxScrollY = Math.max(minScrollY, bounds.bottom - halfH - displayHalfH);
+
+        cam.scrollX = Phaser.Math.Clamp(cam.scrollX + dx, minScrollX, maxScrollX);
+        cam.scrollY = Phaser.Math.Clamp(cam.scrollY + dy, minScrollY, maxScrollY);
     }
 
     private followPlayerCamera(): void {
@@ -692,9 +713,12 @@ export class Game extends Phaser.Scene {
 
         const right = left + width;
         const bottom = top + height;
+        // Include a 1px strip below the player's feet so danger tiles embedded
+        // flush in a solid floor (where bottom === tileTop) are detected when walked over.
+        const footContactEpsilon = 0.5;
 
         for (const layer of this.currentLevel.collidingLayers) {
-            const tiles = layer.getTilesWithinWorldXY(left, top, width, height, {
+            const tiles = layer.getTilesWithinWorldXY(left, top, width, height + 1, {
                 isNotEmpty: true,
             });
 
@@ -711,7 +735,7 @@ export class Game extends Phaser.Scene {
                 if (
                     right > tileLeft &&
                     left < tileRight &&
-                    bottom > tileTop &&
+                    bottom + footContactEpsilon >= tileTop &&
                     top < tileBottom
                 ) {
                     return true;
@@ -853,8 +877,13 @@ export class Game extends Phaser.Scene {
     private playResetSlideTransition(onMidpointReset: () => void): void {
         this.cancelResetTransition();
 
-        const viewWidth = this.scale?.width || 2048;
-        const viewHeight = this.scale?.height || 1664;
+        const baseWidth = this.scale?.width || 1024;
+        const baseHeight = this.scale?.height || 832;
+        const zoom = this.cameras?.main?.zoom || 1;
+        const viewWidth = baseWidth / zoom;
+        const viewHeight = baseHeight / zoom;
+        const offsetX = (baseWidth - viewWidth) / 2;
+        const offsetY = (baseHeight - viewHeight) / 2;
         const feather = Math.round(viewWidth * 0.25);
         const totalWidth = viewWidth + feather * 2;
         const textureKey = this.ensureResetFadeTexture(viewWidth, feather);
@@ -864,12 +893,12 @@ export class Game extends Phaser.Scene {
             return;
         }
 
-        const startX = -totalWidth;
-        const midX = -feather;
-        const endX = viewWidth;
+        const startX = offsetX - totalWidth;
+        const midX = offsetX - feather;
+        const endX = offsetX + viewWidth;
 
         const overlay = this.add
-            .image(startX, 0, textureKey)
+            .image(startX, offsetY, textureKey)
             .setOrigin(0, 0)
             .setDisplaySize(totalWidth, viewHeight)
             .setScrollFactor(0)

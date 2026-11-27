@@ -14,6 +14,8 @@ export class GameHUD {
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
 
+        const { rightEdge, topEdge } = this.getScreenBounds();
+
         // Compact semi-transparent dark background card in top-right corner
         this.trackBg = this.scene.add.rectangle(0, 0, 200, 60, 0x1e1e1e, 0.85);
         this.trackBg.setStrokeStyle(2, 0x444444);
@@ -22,8 +24,7 @@ export class GameHUD {
         this.trackBg.setVisible(false);
 
         // Compact monospace text display aligned to the top-right
-        const rightEdge = (this.scene.scale?.width || 2048) - 32;
-        this.trackText = this.scene.add.text(rightEdge - 16, 32 + 16, '', {
+        this.trackText = this.scene.add.text(rightEdge - 16, topEdge + 16, '', {
             fontFamily: 'Consolas, Monaco, "Courier New", monospace',
             fontSize: '28px',
             color: '#00ffcc',
@@ -106,11 +107,25 @@ export class GameHUD {
         const boxWidth = Math.round(this.trackText.width + padding * 2);
         const boxHeight = Math.round(this.trackText.height + padding * 2);
         this.trackBg.setSize(boxWidth, boxHeight);
-        const rightEdge = (this.scene.scale?.width || 2048) - 32;
+        const { rightEdge, topEdge } = this.getScreenBounds();
         this.trackBg.setPosition(
             Math.round(rightEdge - boxWidth / 2),
-            Math.round(32 + boxHeight / 2)
+            Math.round(topEdge + boxHeight / 2)
         );
+    }
+
+    private getScreenBounds(): { rightEdge: number; topEdge: number } {
+        const baseWidth = this.scene.scale?.width || 1024;
+        const baseHeight = this.scene.scale?.height || 832;
+        const zoom = this.scene.cameras?.main?.zoom || 1;
+        const worldWidth = baseWidth / zoom;
+        const worldHeight = baseHeight / zoom;
+        const offsetX = (baseWidth - worldWidth) / 2;
+        const offsetY = (baseHeight - worldHeight) / 2;
+        return {
+            rightEdge: offsetX + worldWidth - 32,
+            topEdge: offsetY + 32,
+        };
     }
 
     reset(): void {

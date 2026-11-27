@@ -1,5 +1,7 @@
 import level1Data from './Level-1.json';
 import level2Data from './Level-2.json';
+import level3Data from './Level-3.json';
+import level4Data from './Level-4.json';
 
 /**
  * Collision shape of a single tile within a 64x64 tileset.
@@ -11,6 +13,7 @@ import level2Data from './Level-2.json';
  * - 'ceiling-ramp-left': 45-degree upside-down ceiling corner facing left (solid top-right, '\' underside).
  * - 'ceiling-ramp-right': 45-degree upside-down ceiling corner facing right (solid top-left, '/' underside).
  * - 'danger': Full 64x64 hazardous tile that kills the player on contact.
+ * - 'brittle': Full 64x64 tile replaced at load time by a brittle block that fades out after being stepped on.
  */
 export type TileShape =
     | 'solid'
@@ -19,7 +22,8 @@ export type TileShape =
     | 'ramp-right'
     | 'ceiling-ramp-left'
     | 'ceiling-ramp-right'
-    | 'danger';
+    | 'danger'
+    | 'brittle';
 
 export interface TilesetConfig {
     /** Tileset name matching the embedded tileset name in Tiled JSON. */
@@ -123,6 +127,28 @@ function update(){
 }
 `;
 
+const LEVEL_3_STARTER_CODE = `// Level 3
+
+function start() {
+    moveRight();
+}
+
+function update() {
+
+}
+`;
+
+const LEVEL_4_STARTER_CODE = `// Level 4
+
+function start() {
+    moveRight();
+}
+
+function update() {
+
+}
+`;
+
 /**
  * Registry of all 64x64 tilesets available to levels.
  * Add new tilesets here when expanding the game with additional tile art.
@@ -141,6 +167,7 @@ export const TILESETS: Record<string, TilesetConfig> = {
             22: 'ramp-left',
             30: 'ceiling-ramp-left',
             31: 'ceiling-ramp-right',
+            43: 'brittle',
             44: 'danger',
         },
     },
@@ -170,6 +197,26 @@ export const LEVELS: LevelDefinition[] = [
             y: 1120,
         },
         starterCode: LEVEL_2_STARTER_CODE,
+    },
+    {
+        id: 3,
+        name: 'Level 3',
+        mapData: level3Data as TiledMapJson,
+        spawn: {
+            x: 96,
+            y: 160,
+        },
+        starterCode: LEVEL_3_STARTER_CODE,
+    },
+    {
+        id: 4,
+        name: 'Level 4',
+        mapData: level4Data as TiledMapJson,
+        spawn: {
+            x: 96,
+            y: 1312,
+        },
+        starterCode: LEVEL_4_STARTER_CODE,
     },
 ];
 
