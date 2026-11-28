@@ -17,6 +17,13 @@ vi.mock('phaser', () => ({
 import { TilemapCollider } from '../TilemapCollider';
 import type { LoadedLevel } from '../LevelLoader';
 
+interface TestTileSpec {
+    index: number;
+    left: number;
+    top: number;
+    size?: number;
+}
+
 function runWorldStep(options: {
     prevX: number;
     prevY: number;
@@ -26,7 +33,13 @@ function runWorldStep(options: {
     vy: number;
     width?: number;
     height?: number;
-    tiles: Array<{ index: number; left: number; top: number; size?: number }>;
+    tiles: TestTileSpec[];
+    onSolidCollide?: (body: {
+        position: { x: number; y: number };
+        velocity: { x: number; y: number };
+        height: number;
+        blocked: { down: boolean; left: boolean; right: boolean; up: boolean; none: boolean };
+    }) => void;
 }) {
     const stepHandlers: Array<() => void> = [];
     const width = options.width ?? 62;
@@ -63,7 +76,9 @@ function runWorldStep(options: {
                     stepHandlers.push(fn.bind(ctx));
                 }),
                 off: vi.fn(),
-                collide: vi.fn(),
+                collide: vi.fn(() => {
+                    options.onSolidCollide?.(body);
+                }),
             },
         },
     };
@@ -72,6 +87,8 @@ function runWorldStep(options: {
         const size = t.size ?? 64;
         return {
             index: t.index,
+            x: Math.floor(t.left / size),
+            y: Math.floor(t.top / size),
             getLeft: () => t.left,
             getRight: () => t.left + size,
             getTop: () => t.top,
@@ -79,10 +96,17 @@ function runWorldStep(options: {
         };
     });
 
+    const tileGrid = new Map<string, (typeof mappedTiles)[number]>();
+    for (const mt of mappedTiles) {
+        tileGrid.set(`${mt.x},${mt.y}`, mt);
+    }
+
     const level = {
+        solidGids: [1, 2, 3],
         collidingLayers: [
             {
                 getTilesWithinWorldXY: vi.fn(() => mappedTiles),
+                getTileAt: vi.fn((tx: number, ty: number) => tileGrid.get(`${tx},${ty}`) ?? null),
             },
         ],
         rampLeftGids: new Set([23]),
@@ -99,63 +123,85 @@ function runWorldStep(options: {
     return body;
 }
 
-describe('TilemapCollider ceiling ramps', () => {
-    test('jumping upward into a ceiling ramp stops at ceilY without pushing below prevTop', () => {
-        // Ceiling ramp '/' (32) at x=1152..1216, y=1088..1152.
-        // At x=1184 (midpoint), ceilY = 1152 - 32 = 1120.
-        const body = runWorldStep({
-            prevX: 1184,
-            prevY: 1130,
-            x: 1184,
-            y: 1114,
-            vx: 0,
-            vy: -800,
-            tiles: [{ index: 32, left: 1152, top: 1088 }],
-        });
+        describe('TilemapCollider ramps & ceiling slopes', () => {
+            test('jumping upward into a ceiling ramp stops at ceilY while keeping horizontal momentum', () => {
+                // Ceiling ramp '/' (32) at x=1152..1216, y=1088..1152 -> at x=1184, ceilY = 1120.
+                const body = runWorldStep({
+                    prevX: 1178,
+                    prevY: 1130,
+                    x: 1184,
+                    y: 1114,
+                    vx: 380,
+                    vy: -800,
+                    tiles: [{ index: 32, left: 1152, top: 1088 }],
+                });
 
-        expect(body.position.y).toBe(1120);
-        expect(body.position.y).toBeLessThanOrEqual(1130);
-        expect(body.velocity.y).toBe(0);
-        expect(body.blocked.up).toBe(true);
-    });
+                expect(body.position.y).toBe(1120);
+                // Horizontal speed is preserved, and upward vy glides along the 45-degree slope (-380)
+                expect(body.velocity.x).toBe(380);
+                expect(body.velocity.y).toBe(-380);
+                expect(body.blocked.up).toBe(true);
+            });
 
-    test('moving sideways into a low ceiling ramp never pushes Y downward through the floor', () => {
-        // Ceiling ramp '/' (32) at x=1152..1216, y=1472..1536 above solid ground at y=1600.
-        // Player jumped slightly (prevY=1475, bottom=1587) and moved left to x=1178 (ceilY=1510 > prevY).
-        const body = runWorldStep({
-            prevX: 1216,
-            prevY: 1475,
-            x: 1178,
-            y: 1475,
-            vx: -380,
-            vy: 100,
-            tiles: [{ index: 32, left: 1152, top: 1472 }],
-        });
+                test('airborne sideways hit against a ceiling ramp glides smoothly without killing horizontal speed', () => {
+                    // Moving left in mid-air into '/' ceiling ramp (32): glides down to ceilY keeping vx=-380
+                    const body = runWorldStep({
+                        prevX: 1184,
+                        prevY: 1120,
+                        x: 1178,
+                        y: 1120,
+                        vx: -380,
+                        vy: 0,
+                        tiles: [{ index: 32, left: 1152, top: 1088 }],
+                    });
 
-        // Must block X at prevX and NEVER push Y down past prevY (1475) into the floor at 1600
-        expect(body.position.x).toBe(1216);
-        expect(body.position.y).toBe(1475);
-        expect(body.velocity.x).toBe(0);
-        expect(body.blocked.left).toBe(true);
-    });
+                    expect(body.position.y).toBe(1126);
+                    expect(body.velocity.x).toBe(-380);
+                });
 
-    test('walking on top of a ramp bridge ignores the ceiling ramp underneath', () => {
-        // Floor ramp '/' (23) at (1088, 1088), ceiling ramp '/' (32) underneath at (1152, 1088).
-        // Player stands on floor ramp (prevY=990, way above tileTop=1088).
-        const body = runWorldStep({
-            prevX: 1110,
-            prevY: 990,
-            x: 1116,
-            y: 990,
-            vx: 380,
-            vy: 20,
-            tiles: [
-                { index: 23, left: 1088, top: 1088 },
-                { index: 32, left: 1152, top: 1088 },
-            ],
-        });
+                test('grounded wedge under a ceiling ramp pushes horizontally out instead of shoving through the floor', () => {
+                    // Floor at y=1600 keeps body.position.y = 1488 (blocked.down = true);
+                    // ceiling ramp '/' (32) at (1152, 1440..1504) has ceilY=1488 at x=1168 and ceilY=1494 at x=1162.
+                    const body = runWorldStep({
+                        prevX: 1168,
+                        prevY: 1488,
+                        x: 1162,
+                        y: 1488,
+                        vx: -380,
+                        vy: 20,
+                        tiles: [{ index: 32, left: 1152, top: 1440 }],
+                        onSolidCollide: (b) => {
+                            if (b.position.y + b.height >= 1600) {
+                                b.position.y = 1600 - b.height;
+                                b.blocked.down = true;
+                                b.blocked.none = false;
+                            }
+                        },
+                    });
 
-        expect(body.position.x).toBe(1116);
-        expect(body.blocked.right).toBe(false);
-    });
-});
+                    // Stays on top of floor (y=1488) and pushes X right out of the wedge (x=1168)
+                    expect(body.position.y).toBe(1488);
+                    expect(body.position.x).toBe(1168);
+                    expect(body.blocked.left).toBe(true);
+                });
+
+                    test('connected ramp beam (floor ramp adjacent to ceiling ramp) does not trigger fake internal back-walls', () => {
+                        // '/' ramp (23) at (1088, 1088) with adjacent 'r' ceiling ramp (32) at (1152, 1088).
+                        // Descending left across x=1152 seam must NOT zero velocity.x on an internal back-wall.
+                        const body = runWorldStep({
+                            prevX: 1151,
+                            prevY: 980,
+                            x: 1145,
+                            y: 984,
+                            vx: -380,
+                            vy: 20,
+                            tiles: [
+                                { index: 23, left: 1088, top: 1088 },
+                                { index: 32, left: 1152, top: 1088 },
+                            ],
+                        });
+
+                        expect(body.velocity.x).toBe(-380);
+                        expect(body.blocked.left).toBe(false);
+                    });
+                });

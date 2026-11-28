@@ -191,7 +191,15 @@ export class Game extends Phaser.Scene {
             this.player.reset();
         }
 
-        this.tilemapCollider = new TilemapCollider(this, this.player, loaded);
+        this.tilemapCollider = new TilemapCollider(
+            this,
+            this.player,
+            loaded,
+            () =>
+                this.doorEntities
+                    .filter((d) => !d.isOpen)
+                    .map((d) => d.sprite)
+        );
         this.spawnLevelInteractables(loaded);
         this.cameras.main.centerOn(loaded.spawn.x, loaded.spawn.y);
 

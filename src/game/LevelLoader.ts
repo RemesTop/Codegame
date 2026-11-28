@@ -269,9 +269,17 @@ export class LevelLoader {
 
             if (meta.collides) {
                 // Only full solid tiles are marked colliding in Phaser's face calculator;
-                // 45-degree ramps are handled separately so adjacent solids keep their top/side faces.
+                // 45-degree ramps are handled separately in TilemapCollider.
                 if (solidGids.length > 0) {
                     layer.setCollision(solidGids);
+                    LevelLoader.cullInternalRampFaces(
+                        layer,
+                        new Set(solidGids),
+                        rampLeftGids,
+                        rampRightGids,
+                        ceilingRampLeftGids,
+                        ceilingRampRightGids
+                    );
                 }
                 collidingLayers.push(layer);
             }
@@ -321,5 +329,57 @@ export class LevelLoader {
                 map.destroy();
             },
         };
+    }
+
+    /**
+     * Clears hidden internal collision faces on solid tiles where they meet the
+     * full-length solid edge of a neighboring 45-degree floor or ceiling ramp,
+     * preventing Arcade Physics from snagging on seam corners.
+     */
+    private static cullInternalRampFaces(
+        layer: Phaser.Tilemaps.TilemapLayer,
+        solidGids: Set<number>,
+        rampLeftGids: Set<number>,
+        rampRightGids: Set<number>,
+        ceilingRampLeftGids: Set<number>,
+        ceilingRampRightGids: Set<number>
+    ): void {
+        if (typeof layer.forEachTile !== 'function' || typeof layer.getTileAt !== 'function') {
+            return;
+        }
+
+        const clearFace = (
+            tx: number,
+            ty: number,
+            face: 'faceLeft' | 'faceRight' | 'faceTop' | 'faceBottom'
+        ) => {
+            const neighbor = layer.getTileAt(tx, ty);
+            if (neighbor && solidGids.has(neighbor.index)) {
+                neighbor[face] = false;
+            }
+        };
+
+        layer.forEachTile((tile) => {
+            const gid = tile.index;
+            if (gid <= 0) return;
+
+            if (rampLeftGids.has(gid)) {
+                // '/' ramp has full solid right edge and bottom edge
+                clearFace(tile.x + 1, tile.y, 'faceLeft');
+                clearFace(tile.x, tile.y + 1, 'faceTop');
+            } else if (rampRightGids.has(gid)) {
+                // '\' ramp has full solid left edge and bottom edge
+                clearFace(tile.x - 1, tile.y, 'faceRight');
+                clearFace(tile.x, tile.y + 1, 'faceTop');
+            } else if (ceilingRampLeftGids.has(gid)) {
+                // Ceiling '\' (solid top-right) has full solid top edge and right edge
+                clearFace(tile.x, tile.y - 1, 'faceBottom');
+                clearFace(tile.x + 1, tile.y, 'faceLeft');
+            } else if (ceilingRampRightGids.has(gid)) {
+                // Ceiling '/' (solid top-left) has full solid top edge and left edge
+                clearFace(tile.x, tile.y - 1, 'faceBottom');
+                clearFace(tile.x - 1, tile.y, 'faceRight');
+            }
+        });
     }
 }
