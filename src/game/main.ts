@@ -18,6 +18,8 @@ const config: Types.Core.GameConfig = {
     physics: {
         default: 'arcade',
         arcade: {
+            tileBias: 32,
+            overlapBias: 16,
             gravity: {
                 x: 0,
                 y: 1400,

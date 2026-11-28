@@ -69,12 +69,13 @@ export class Game extends Phaser.Scene {
 
     preload() {
         this.load.setPath('assets');
-        this.load.image('bg-sky', 'bg_blue_SKY.png');
+        this.load.image('bg-sky', 'bg_neon_SKY.png');
         this.load.image('bg-city', 'bg_blue_CITY.png');
         this.load.image('keycard', 'keycard1.png');
         this.load.image('door-closed', 'Locked-door-1.png');
         this.load.image('door-open', 'Locked-door-2.png');
         this.load.image('goal-teleport', 'teleport1.png');
+        Player.preload(this);
         LevelLoader.preload(this);
     }
 
@@ -190,7 +191,15 @@ export class Game extends Phaser.Scene {
             this.player.reset();
         }
 
-        this.tilemapCollider = new TilemapCollider(this, this.player, loaded);
+        this.tilemapCollider = new TilemapCollider(
+            this,
+            this.player,
+            loaded,
+            () =>
+                this.doorEntities
+                    .filter((d) => !d.isOpen)
+                    .map((d) => d.sprite)
+        );
         this.spawnLevelInteractables(loaded);
         this.cameras.main.centerOn(loaded.spawn.x, loaded.spawn.y);
 
@@ -310,8 +319,14 @@ export class Game extends Phaser.Scene {
                 deltaX: number,
                 deltaY: number
             ) => {
-                if (this.isSimulating || this.isDying || this.isResetting) return;
-                this.cancelIntroPan();
+                if (
+                    this.isSimulating ||
+                    this.isDying ||
+                    this.isResetting ||
+                    this.introPanTween
+                ) {
+                    return;
+                }
 
                 const cam = this.cameras.main;
                 const wheelScale = 1;
@@ -335,8 +350,14 @@ export class Game extends Phaser.Scene {
         );
 
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            if (this.isSimulating || this.isDying || this.isResetting) return;
-            this.cancelIntroPan();
+            if (
+                this.isSimulating ||
+                this.isDying ||
+                this.isResetting ||
+                this.introPanTween
+            ) {
+                return;
+            }
             isDragging = true;
             lastPointerX = pointer.x;
             lastPointerY = pointer.y;
@@ -348,6 +369,7 @@ export class Game extends Phaser.Scene {
                 this.isSimulating ||
                 this.isDying ||
                 this.isResetting ||
+                this.introPanTween ||
                 !pointer.isDown
             ) {
                 isDragging = false;
@@ -513,7 +535,6 @@ export class Game extends Phaser.Scene {
             const sprite = this.add
                 .image(kc.x, kc.y, 'keycard')
                 .setOrigin(0.5, 0.5)
-                .setScale(2)
                 .setDepth(6);
             this.keycardEntities.push({
                 sprite,
@@ -526,7 +547,6 @@ export class Game extends Phaser.Scene {
             const sprite = this.physics.add
                 .staticImage(door.x, door.y, 'door-closed')
                 .setOrigin(0.5, 0.5)
-                .setScale(2)
                 .setDepth(4);
             sprite.refreshBody();
 
@@ -713,29 +733,38 @@ export class Game extends Phaser.Scene {
 
         const right = left + width;
         const bottom = top + height;
-        // Include a 1px strip below the player's feet so danger tiles embedded
-        // flush in a solid floor (where bottom === tileTop) are detected when walked over.
-        const footContactEpsilon = 0.5;
+        // Extend hitbox slightly above the tile so walking over flush ground danger
+        // tiles kills the player, while insetting the sides and bottom so danger tiles
+        // placed on diagonal ramp corners cannot clip through and kill from underneath.
+        const topExtend = 2;
+        const sideInset = 6;
+        const bottomInset = 6;
 
         for (const layer of this.currentLevel.collidingLayers) {
-            const tiles = layer.getTilesWithinWorldXY(left, top, width, height + 1, {
-                isNotEmpty: true,
-            });
+            const tiles = layer.getTilesWithinWorldXY(
+                left,
+                top,
+                width,
+                height + topExtend,
+                {
+                    isNotEmpty: true,
+                }
+            );
 
             for (const tile of tiles) {
                 if (!this.currentLevel.dangerGids.has(tile.index)) {
                     continue;
                 }
 
-                const tileLeft = tile.getLeft();
-                const tileRight = tile.getRight();
-                const tileTop = tile.getTop();
-                const tileBottom = tile.getBottom();
+                const tileLeft = tile.getLeft() + sideInset;
+                const tileRight = tile.getRight() - sideInset;
+                const tileTop = tile.getTop() - topExtend;
+                const tileBottom = tile.getBottom() - bottomInset;
 
                 if (
                     right > tileLeft &&
                     left < tileRight &&
-                    bottom + footContactEpsilon >= tileTop &&
+                    bottom > tileTop &&
                     top < tileBottom
                 ) {
                     return true;

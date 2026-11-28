@@ -301,11 +301,11 @@ describe('Danger tile configuration & death sequence', () => {
         expect(EventBus.emit).toHaveBeenCalledWith('code-stopped');
     });
 
-    test('standing directly on top of a ground danger tile kills the player', () => {
+    test('walking directly on top of a ground danger tile kills the player', () => {
         const { game, codeRunner, createdTweens } = createDangerTestHarness({
             // Feet are flush with the top of a ground-embedded danger tile (bottom === tileTop)
             playerBox: { x: 96, y: 432, width: 32, height: 48 },
-            dangerTiles: [{ index: 37, left: 96, top: 480 }],
+            dangerTiles: [{ index: 37, left: 96, top: 480, size: 64 }],
         });
 
         game.update(0, 16);
@@ -314,11 +314,11 @@ describe('Danger tile configuration & death sequence', () => {
         expect(createdTweens).toHaveLength(1);
     });
 
-    test('standing adjacent to a danger tile without overlapping does not kill the player', () => {
+    test('grazing the bottom-right corner of a danger tile (e.g. under a ramp) does not kill the player', () => {
         const { game, codeRunner, createdTweens } = createDangerTestHarness({
-            // Right edge is exactly x=96 (flush with danger tile left x=96, no horizontal overlap)
-            playerBox: { x: 64, y: 432, width: 32, height: 48 },
-            dangerTiles: [{ index: 37, left: 96, top: 480 }],
+            // Player top-left corner overlaps only the outer 4x4px of the danger tile's bottom-right corner
+            playerBox: { x: 156, y: 540, width: 62, height: 112 },
+            dangerTiles: [{ index: 37, left: 96, top: 480, size: 64 }],
         });
 
         game.update(0, 16);

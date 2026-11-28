@@ -202,4 +202,35 @@ describe('Level intro camera pan', () => {
         game['handleRunCode']('function update() {}');
         expect(createdTweens[0].stop).toHaveBeenCalledOnce();
     });
+
+    test('blocks mouse wheel and drag panning while intro pan is active', () => {
+        const { game, cam, createdTweens } = createCameraPanHarness({
+            right: 2048,
+            bottom: 832,
+            camWidth: 1024,
+            camHeight: 832,
+        });
+
+        const handlers = new Map<string, (...args: unknown[]) => void>();
+        Object.assign(game, {
+            input: {
+                on: vi.fn((event: string, fn: (...args: unknown[]) => void) => {
+                    handlers.set(event, fn);
+                }),
+            },
+        });
+
+        game['setupPreviewCameraControls']();
+        game['playLevelIntroPan']({ x: 64, y: 400 });
+        expect(createdTweens).toHaveLength(1);
+        expect(cam.scrollX).toBe(1024);
+
+        // Wheel and pointer drag during intro pan should neither cancel it nor move the camera
+        handlers.get('wheel')?.({}, [], -120, 0);
+        handlers.get('pointerdown')?.({ x: 300, y: 300, isDown: true });
+        handlers.get('pointermove')?.({ x: 420, y: 300, isDown: true });
+
+        expect(createdTweens[0].stop).not.toHaveBeenCalled();
+        expect(cam.scrollX).toBe(1024);
+    });
 });

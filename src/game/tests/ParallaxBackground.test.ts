@@ -133,10 +133,77 @@ describe('ParallaxBackground', () => {
         cam.scrollX = 400;
         bg.update();
 
-        expect(sky.tilePositionX).toBeCloseTo(400 * DEFAULT_PARALLAX_CONFIG.skyFactorX);
-        expect(city.tilePositionX).toBeCloseTo(400 * DEFAULT_PARALLAX_CONFIG.cityFactorX);
-        expect(sky.tilePositionX).toBeLessThan(city.tilePositionX);
-        expect(city.tilePositionX).toBeLessThan(400);
+        expect(sky.tilePositionX).toBeCloseTo(
+            (400 / sky.tileScaleX) * DEFAULT_PARALLAX_CONFIG.skyFactorX
+        );
+        expect(city.tilePositionX).toBeCloseTo(
+            (400 / city.tileScaleX) * DEFAULT_PARALLAX_CONFIG.cityFactorX
+        );
+        expect(sky.tilePositionX * sky.tileScaleX).toBeLessThan(
+            city.tilePositionX * city.tileScaleX
+        );
+        expect(city.tilePositionX * city.tileScaleX).toBeLessThan(400);
+    });
+
+    test('preserves uniform sky aspect ratio without squishing and disables sky blur by default', () => {
+        const { scene, createdSprites } = createMockScene({
+            boundsRight: 2048,
+            boundsBottom: 1664,
+        });
+
+        // Override sky frame to 1280x720
+        const origTileSprite = scene.add.tileSprite as unknown as ReturnType<typeof vi.fn>;
+        origTileSprite.mockImplementationOnce(
+            (x: number, y: number, width: number, height: number, textureKey: string) => {
+                const sprite = {
+                    x,
+                    y,
+                    width,
+                    height,
+                    textureKey,
+                    tilePositionX: 0,
+                    tileScaleX: 1,
+                    tileScaleY: 1,
+                    depth: 0,
+                    scrollFactor: 1,
+                    alpha: 1,
+                    frame: { width: 1280, height: 720 },
+                    setOrigin: vi.fn(),
+                    setScrollFactor: vi.fn((sf: number) => {
+                        sprite.scrollFactor = sf;
+                        return sprite;
+                    }),
+                    setDepth: vi.fn((d: number) => {
+                        sprite.depth = d;
+                        return sprite;
+                    }),
+                    setAlpha: vi.fn((a: number) => {
+                        sprite.alpha = a;
+                        return sprite;
+                    }),
+                    setSize: vi.fn((w: number, h: number) => {
+                        sprite.width = w;
+                        sprite.height = h;
+                        return sprite;
+                    }),
+                    setTileScale: vi.fn((sx: number, sy: number) => {
+                        sprite.tileScaleX = sx;
+                        sprite.tileScaleY = sy;
+                        return sprite;
+                    }),
+                    destroy: vi.fn(),
+                };
+                sprite.setOrigin.mockReturnValue(sprite);
+                createdSprites.push(sprite);
+                return sprite;
+            }
+        );
+
+        new ParallaxBackground(scene);
+        const [sky] = createdSprites;
+
+        expect(DEFAULT_PARALLAX_CONFIG.skyBlurStrength).toBe(0);
+        expect(sky.tileScaleX).toBeCloseTo(sky.tileScaleY);
     });
 
     test('scrolls slower vertically on both layers without exposing gaps at top or bottom', () => {
