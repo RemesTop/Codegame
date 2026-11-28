@@ -311,8 +311,14 @@ export class Game extends Phaser.Scene {
                 deltaX: number,
                 deltaY: number
             ) => {
-                if (this.isSimulating || this.isDying || this.isResetting) return;
-                this.cancelIntroPan();
+                if (
+                    this.isSimulating ||
+                    this.isDying ||
+                    this.isResetting ||
+                    this.introPanTween
+                ) {
+                    return;
+                }
 
                 const cam = this.cameras.main;
                 const wheelScale = 1;
@@ -336,8 +342,14 @@ export class Game extends Phaser.Scene {
         );
 
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            if (this.isSimulating || this.isDying || this.isResetting) return;
-            this.cancelIntroPan();
+            if (
+                this.isSimulating ||
+                this.isDying ||
+                this.isResetting ||
+                this.introPanTween
+            ) {
+                return;
+            }
             isDragging = true;
             lastPointerX = pointer.x;
             lastPointerY = pointer.y;
@@ -349,6 +361,7 @@ export class Game extends Phaser.Scene {
                 this.isSimulating ||
                 this.isDying ||
                 this.isResetting ||
+                this.introPanTween ||
                 !pointer.isDown
             ) {
                 isDragging = false;
